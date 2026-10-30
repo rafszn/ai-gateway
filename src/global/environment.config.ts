@@ -50,7 +50,7 @@ export const cfg = {
   NODE_ENV: env.NODE_ENV,
   PORT: Number(env.PORT),
   APP_NAME: env.APP_NAME,
-  MONG0_URL: env.MONGO_URL,
+  MONGO_URL: env.MONGO_URL,
 
   RESEND_FROM: env.RESEND_FROM,
   RESEND_API_KEY: env.RESEND_API_KEY,

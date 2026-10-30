@@ -36,10 +36,30 @@ export default class App {
     this.app.use(requestGuard); // block scanners / traversal
     this.app.use(express.static("public"));
 
-    // health check,
+    // health check
+    this.app.get("/health", (req, res) => {
+      const uptime = process.uptime();
+
+      const days = Math.floor(uptime / 86400);
+      const seconds = Math.floor(uptime % 60);
+      const minutes = Math.floor((uptime % 3600) / 60);
+      const hours = Math.floor((uptime % 86400) / 3600);
+
+      res.status(HTTP_STATUS.OK).json({
+        success: true,
+        status: "healthy",
+        service: "AI GATEWAY",
+        uptime: {
+          seconds: uptime,
+          human: `${days}d ${hours}h ${minutes}m ${seconds}s`,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    });
+
     this.app.get("/", (req, res) => {
       res.status(HTTP_STATUS.OK).json({
-        server: "SERVER_01_APP",
+        server: "AI GATEWAY",
       });
     });
 
