@@ -4,6 +4,17 @@ import dotenv from "dotenv";
 const envFile = `.env.${process.env.NODE_ENV || "development"}`;
 dotenv.config({ path: envFile });
 
+const foundryBaseUrlSchema = z.url().refine((value) => {
+  const url = new URL(value);
+
+  return (
+    url.protocol === "https:" &&
+    url.search.length === 0 &&
+    url.hash.length === 0 &&
+    url.pathname.replace(/\/+$/, "").endsWith("/openai/v1")
+  );
+}, "FOUNDRY_BASE_URL must be an HTTPS Azure OpenAI v1 URL ending in /openai/v1");
+
 const envSchema = z.object({
   APP_NAME: z.string().default("ai-gateway"),
   NODE_ENV: z
@@ -26,6 +37,22 @@ const envSchema = z.object({
     .transform((username) => username.toLowerCase()),
   SUPER_ADMIN_PASSWORD: z.string().min(12).max(128),
   ADMIN_JWT_SECRET: z.string().min(32),
+
+  /* ---------- foundry openai ---------- */
+  FOUNDRY_BASE_URL: foundryBaseUrlSchema,
+  FOUNDRY_API_KEY: z.string().min(1),
+  FOUNDRY_MAX_REQUEST_TOKENS: z.coerce
+    .number()
+    .int()
+    .min(16)
+    .max(10_000_000)
+    .default(150_000),
+  FOUNDRY_DEFAULT_MAX_OUTPUT_TOKENS: z.coerce
+    .number()
+    .int()
+    .min(16)
+    .max(10_000_000)
+    .default(16_384),
 
   /* ---------- resend ---------- */
   RESEND_API_KEY: z.string().optional(),
@@ -65,6 +92,11 @@ export const cfg = {
   SUPER_ADMIN_USERNAME: env.SUPER_ADMIN_USERNAME,
   SUPER_ADMIN_PASSWORD: env.SUPER_ADMIN_PASSWORD,
   ADMIN_JWT_SECRET: env.ADMIN_JWT_SECRET,
+
+  FOUNDRY_BASE_URL: env.FOUNDRY_BASE_URL,
+  FOUNDRY_API_KEY: env.FOUNDRY_API_KEY,
+  FOUNDRY_MAX_REQUEST_TOKENS: env.FOUNDRY_MAX_REQUEST_TOKENS,
+  FOUNDRY_DEFAULT_MAX_OUTPUT_TOKENS: env.FOUNDRY_DEFAULT_MAX_OUTPUT_TOKENS,
 
   RESEND_FROM: env.RESEND_FROM,
   RESEND_API_KEY: env.RESEND_API_KEY,

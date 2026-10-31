@@ -1,12 +1,13 @@
 import argon2 from "argon2";
 import jwt from "jsonwebtoken";
 import cfg from "../../../global/environment.config.js";
+import { HOUR } from "../../../global/constants/time.js";
 import { AdminRepository } from "../../../data/models/admin/index.js";
 import type { AdminRecord } from "../../../data/models/admin/index.js";
 import { AppError } from "../../../global/middlewares/error-handler.js";
 import { ADMIN_PERMISSIONS, type AdminPermission } from "./permissions.js";
 
-const TOKEN_TTL_SECONDS = 60 * 60;
+const TOKEN_TTL_SECONDS = 2 * HOUR;
 
 function toPublicAdmin(admin: AdminRecord) {
   return {
@@ -43,7 +44,7 @@ class AdminService {
     }
 
     const accessToken = jwt.sign({ sub: admin.id }, cfg.ADMIN_JWT_SECRET, {
-      expiresIn: "1h",
+      expiresIn: "2h",
     });
 
     return {
