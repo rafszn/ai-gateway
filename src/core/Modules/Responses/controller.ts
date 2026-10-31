@@ -180,20 +180,42 @@ export const createResponse: RequestHandler = async (request, response) => {
     });
   }
 
-  const startedAt = auth.requestStartedAt;
+  const { requestId, requestStartedAt: startedAt } = auth;
+  const requestModel = getRequestedModel(request.body);
+  const streamRequested =
+    isRecord(request.body) && request.body.stream === true;
+
+  logger.info("Responses request started", {
+    requestId,
+    memberId: auth.memberId,
+    keyId: auth.key.id,
+    model: requestModel,
+    stream: streamRequested,
+  });
+
+  let stage = "usage_record_start";
   let usageRecordId: string;
 
   try {
     const usageRecord = await usageService.start({
       memberId: auth.memberId,
       keyId: auth.key.id,
-      model: getRequestedModel(request.body),
+      model: requestModel,
       requestedAt: new Date(startedAt),
     });
 
     usageRecordId = usageRecord.id;
+
+    logger.info("Responses usage record started", {
+      requestId,
+      usageId: usageRecordId,
+    });
   } catch (error) {
-    logger.error("Could not start the request usage record", error);
+    logger.error("Could not start the request usage record", error, {
+      requestId,
+      memberId: auth.memberId,
+      keyId: auth.key.id,
+    });
 
     return sendOpenAiError(response, HTTP_STATUS.SERVICE_UNAVAILABLE, {
       message: "The gateway could not record this request",
@@ -206,7 +228,14 @@ export const createResponse: RequestHandler = async (request, response) => {
   let clientDisconnected = false;
   let upstreamAttempted = false;
   let upstreamStatus: number | null = null;
+  let upstreamContentType: string | null = null;
+  let providerRequestId: string | null = null;
   let reservationId: string | null = null;
+  let reservedTokens: number | null = null;
+  let parsedResponseUsage: ResponseUsage | null = null;
+  let usageTransform: ResponsesUsageTransform | null = null;
+  let quotaDisposition = "NOT_RESERVED";
+  let usagePersisted = false;
   let finished = false;
 
   const onRequestAborted = () => {
@@ -235,28 +264,54 @@ export const createResponse: RequestHandler = async (request, response) => {
 
     finished = true;
     const completedAt = new Date();
+    const latencyMs = Math.max(0, completedAt.getTime() - startedAt);
     const currentReservationId = reservationId;
     reservationId = null;
 
     if (currentReservationId) {
       try {
         if (!upstreamAttempted) {
-          await quotaService.releaseBeforeUpstream(currentReservationId);
-        } else if (params.usage?.totalTokens !== null && params.usage) {
-          await quotaService.completeWithUsage({
+          const released =
+            await quotaService.releaseBeforeUpstream(currentReservationId);
+          quotaDisposition = released
+            ? "RELEASED_BEFORE_UPSTREAM"
+            : "RELEASE_NOT_APPLIED";
+        } else if (params.usage && params.usage.totalTokens !== null) {
+          const settled = await quotaService.completeWithUsage({
             reservationId: currentReservationId,
             actualTokens: params.usage.totalTokens,
           });
+          quotaDisposition = settled
+            ? "SETTLED_WITH_FOUNDRY_USAGE"
+            : "USAGE_SETTLEMENT_NOT_APPLIED";
         } else {
-          await quotaService.completeWithoutUsage(currentReservationId);
+          const charged =
+            await quotaService.completeWithoutUsage(currentReservationId);
+          quotaDisposition = charged
+            ? "CHARGED_RESERVED_ESTIMATE"
+            : "ESTIMATE_CHARGE_NOT_APPLIED";
         }
+
+        logger.info("Responses quota finalized", {
+          requestId,
+          reservationId: currentReservationId,
+          disposition: quotaDisposition,
+          reservedTokens,
+          actualTokens: params.usage?.totalTokens ?? null,
+        });
       } catch (error) {
-        logger.error("Could not finalize the quota reservation", error);
+        quotaDisposition = "FINALIZATION_FAILED";
+        logger.error("Could not finalize the quota reservation", error, {
+          requestId,
+          reservationId: currentReservationId,
+          reservedTokens,
+          actualTokens: params.usage?.totalTokens ?? null,
+        });
       }
     }
 
     try {
-      await usageService.finish({
+      const finalizedUsage = await usageService.finish({
         usageId: usageRecordId,
         quotaReservationId: currentReservationId,
         inputTokens: params.usage?.inputTokens ?? null,
@@ -264,19 +319,62 @@ export const createResponse: RequestHandler = async (request, response) => {
         totalTokens: params.usage?.totalTokens ?? null,
         status: params.status,
         httpStatus: params.httpStatus,
-        latencyMs: Math.max(0, completedAt.getTime() - startedAt),
+        latencyMs,
         completedAt,
       });
+
+      usagePersisted = finalizedUsage !== null;
+
+      if (!usagePersisted) {
+        logger.warn("Responses usage record was not finalized", {
+          requestId,
+          usageId: usageRecordId,
+        });
+      }
     } catch (error) {
-      logger.error("Could not finalize the request usage record", error);
+      logger.error("Could not finalize the request usage record", error, {
+        requestId,
+        usageId: usageRecordId,
+      });
     }
+
+    logger.info("Responses request completed", {
+      requestId,
+      usageId: usageRecordId,
+      memberId: auth.memberId,
+      keyId: auth.key.id,
+      model: requestModel,
+      status: params.status,
+      httpStatus: params.httpStatus,
+      upstreamAttempted,
+      upstreamStatus,
+      providerRequestId,
+      upstreamContentType,
+      quotaDisposition,
+      reservedTokens,
+      inputTokens: params.usage?.inputTokens ?? null,
+      outputTokens: params.usage?.outputTokens ?? null,
+      totalTokens: params.usage?.totalTokens ?? null,
+      usagePersisted,
+      latencyMs,
+    });
   };
 
   try {
+    stage = "request_validation";
     const parsedRequest = responsesRequestSchema.safeParse(request.body);
 
     if (!parsedRequest.success) {
       const issue = parsedRequest.error.issues[0];
+      const param = issue?.path.join(".") || "body";
+
+      logger.warn("Responses request rejected", {
+        requestId,
+        stage,
+        reason: "invalid_request",
+        param,
+      });
+
       await finish({
         status: "REJECTED",
         httpStatus: HTTP_STATUS.BAD_REQUEST,
@@ -286,14 +384,25 @@ export const createResponse: RequestHandler = async (request, response) => {
       return sendOpenAiError(response, HTTP_STATUS.BAD_REQUEST, {
         message: issue?.message ?? "Invalid Responses API request",
         type: "invalid_request_error",
-        param: issue?.path.join(".") || "body",
+        param,
         code: "invalid_request",
       });
     }
 
     const body = parsedRequest.data;
+    const model = body.model;
 
-    if (!auth.key.models.includes(body.model)) {
+    stage = "model_authorization";
+
+    if (!auth.key.models.includes(model)) {
+      logger.warn("Responses request rejected", {
+        requestId,
+        stage,
+        reason: "model_not_allowed",
+        model,
+        keyId: auth.key.id,
+      });
+
       await finish({
         status: "REJECTED",
         httpStatus: HTTP_STATUS.BAD_REQUEST,
@@ -301,16 +410,46 @@ export const createResponse: RequestHandler = async (request, response) => {
       });
 
       return sendOpenAiError(response, HTTP_STATUS.BAD_REQUEST, {
-        message: `Model not allowed: ${body.model}`,
+        message: `Model not allowed: ${model}`,
         type: "invalid_request_error",
         param: "model",
         code: "model_not_allowed",
       });
     }
 
+    stage = "request_estimation";
     const preparedRequest = responsesService.prepare(body);
+    const reservedOutputTokens =
+      typeof body.max_output_tokens === "number"
+        ? body.max_output_tokens
+        : cfg.FOUNDRY_DEFAULT_MAX_OUTPUT_TOKENS;
+    const estimatedInputTokens = Math.max(
+      0,
+      preparedRequest.estimatedTokens - reservedOutputTokens,
+    );
+
+    reservedTokens = preparedRequest.estimatedTokens;
+
+    logger.info("Responses request token estimate", {
+      requestId,
+      model,
+      estimatedInputTokens,
+      reservedOutputTokens,
+      estimatedTotalTokens: preparedRequest.estimatedTokens,
+      maxRequestTokens: cfg.FOUNDRY_MAX_REQUEST_TOKENS,
+    });
 
     if (preparedRequest.estimatedTokens > cfg.FOUNDRY_MAX_REQUEST_TOKENS) {
+      quotaDisposition = "REJECTED_REQUEST_SIZE";
+
+      logger.warn("Responses request exceeds configured token limit", {
+        requestId,
+        estimatedInputTokens,
+        reservedOutputTokens,
+        estimatedTotalTokens: preparedRequest.estimatedTokens,
+        maxRequestTokens: cfg.FOUNDRY_MAX_REQUEST_TOKENS,
+      });
+
       await finish({
         status: "REJECTED",
         httpStatus: HTTP_STATUS.PAYLOAD_TOO_LARGE,
@@ -325,6 +464,14 @@ export const createResponse: RequestHandler = async (request, response) => {
       });
     }
 
+    stage = "quota_reservation";
+    logger.info("Responses quota reservation requested", {
+      requestId,
+      keyId: auth.key.id,
+      reservedTokens: preparedRequest.estimatedTokens,
+      limits: auth.key.limits,
+    });
+
     const quota = await quotaService.reserve({
       keyId: auth.key.id,
       memberId: auth.memberId,
@@ -333,6 +480,16 @@ export const createResponse: RequestHandler = async (request, response) => {
     });
 
     if (quota.type === "LIMITED") {
+      quotaDisposition = "REJECTED_QUOTA_LIMIT";
+
+      logger.warn("Responses quota reservation rejected", {
+        requestId,
+        keyId: auth.key.id,
+        blockedLimits: quota.blockedLimits,
+        retryAfterSeconds: quota.retryAfterSeconds,
+        reservedTokens: preparedRequest.estimatedTokens,
+      });
+
       await finish({
         status: "REJECTED",
         httpStatus: HTTP_STATUS.TOO_MANY_REQUESTS,
@@ -353,6 +510,15 @@ export const createResponse: RequestHandler = async (request, response) => {
     }
 
     if (quota.type === "REQUEST_TOO_LARGE") {
+      quotaDisposition = "REJECTED_KEY_LIMIT";
+
+      logger.warn("Responses request cannot fit key limits", {
+        requestId,
+        keyId: auth.key.id,
+        reservedTokens: preparedRequest.estimatedTokens,
+        limits: auth.key.limits,
+      });
+
       await finish({
         status: "REJECTED",
         httpStatus: HTTP_STATUS.PAYLOAD_TOO_LARGE,
@@ -368,6 +534,13 @@ export const createResponse: RequestHandler = async (request, response) => {
     }
 
     reservationId = quota.reservation.id;
+    quotaDisposition = "RESERVED";
+
+    logger.info("Responses quota reserved", {
+      requestId,
+      reservationId,
+      reservedTokens: preparedRequest.estimatedTokens,
+    });
 
     if (abortController.signal.aborted || response.destroyed) {
       await finish({
@@ -379,34 +552,65 @@ export const createResponse: RequestHandler = async (request, response) => {
       return;
     }
 
+    stage = "foundry_request";
+    logger.info("Foundry Responses request sending", {
+      requestId,
+      model,
+      stream: preparedRequest.stream,
+      reservedTokens,
+      upstreamHost: preparedRequest.url.host,
+      upstreamPath: preparedRequest.url.pathname,
+    });
+
     upstreamAttempted = true;
     const upstream = await responsesService.send(
       preparedRequest,
       abortController.signal,
     );
     upstreamStatus = upstream.status;
+    upstreamContentType = upstream.headers.get("content-type");
+    providerRequestId =
+      upstream.headers.get("x-request-id") ??
+      upstream.headers.get("apim-request-id");
 
-    const contentType = upstream.headers.get("content-type") ?? "";
+    logger.info("Foundry Responses response received", {
+      requestId,
+      providerRequestId,
+      status: upstream.status,
+      statusText: upstream.statusText,
+      contentType: upstreamContentType,
+      stream: preparedRequest.stream,
+    });
 
     if (
       upstream.body &&
-      contentType.toLowerCase().includes("text/event-stream")
+      (upstreamContentType ?? "").toLowerCase().includes("text/event-stream")
     ) {
+      stage = "stream_response";
       copyUpstreamHeaders(upstream, response);
       response.setHeader("Cache-Control", "no-cache, no-transform");
       response.setHeader("X-Accel-Buffering", "no");
       response.status(upstream.status);
       response.flushHeaders();
 
-      const usageTransform = new ResponsesUsageTransform();
+      const streamUsageTransform = new ResponsesUsageTransform();
+      usageTransform = streamUsageTransform;
 
       await pipeline(
         Readable.fromWeb(
           upstream.body as import("node:stream/web").ReadableStream<Uint8Array>,
         ),
-        usageTransform,
+        streamUsageTransform,
         response,
       );
+
+      parsedResponseUsage = streamUsageTransform.usage;
+
+      logger.info("Foundry Responses usage parsed", {
+        requestId,
+        source: "stream",
+        usage: parsedResponseUsage,
+      });
 
       await finish({
         status:
@@ -414,17 +618,24 @@ export const createResponse: RequestHandler = async (request, response) => {
             ? "SUCCEEDED"
             : "FAILED",
         httpStatus: upstream.status,
-        usage: usageTransform.usage,
+        usage: parsedResponseUsage,
       });
 
       return;
     }
 
+    stage = "read_response";
     const responseBody = upstream.body
       ? Buffer.from(await upstream.arrayBuffer())
       : Buffer.alloc(0);
 
-    const usage = toUsage(responseBody.toString("utf8"));
+    parsedResponseUsage = toUsage(responseBody.toString("utf8"));
+
+    logger.info("Foundry Responses usage parsed", {
+      requestId,
+      source: "response_body",
+      usage: parsedResponseUsage,
+    });
 
     copyUpstreamHeaders(upstream, response);
     response.status(upstream.status);
@@ -435,11 +646,12 @@ export const createResponse: RequestHandler = async (request, response) => {
           ? "SUCCEEDED"
           : "FAILED",
       httpStatus: upstream.status,
-      usage,
+      usage: parsedResponseUsage,
     });
 
     return response.send(responseBody);
   } catch (error) {
+    const failedStage = stage;
     const status = clientDisconnected ? "INTERRUPTED" : "FAILED";
     const httpStatus =
       upstreamStatus ??
@@ -450,19 +662,39 @@ export const createResponse: RequestHandler = async (request, response) => {
     await finish({
       status,
       httpStatus: clientDisconnected ? upstreamStatus : httpStatus,
-      usage: null,
+      usage: parsedResponseUsage ?? usageTransform?.usage ?? null,
     });
 
     if (response.destroyed || clientDisconnected) {
+      logger.warn("Responses request ended after client disconnect", {
+        requestId,
+        failedStage,
+        upstreamAttempted,
+        upstreamStatus,
+        providerRequestId,
+      });
+
       return;
     }
 
     if (response.headersSent) {
+      logger.error("Responses stream failed after headers were sent", error, {
+        requestId,
+        failedStage,
+        upstreamStatus,
+        providerRequestId,
+      });
       response.destroy();
       return;
     }
 
-    logger.error("Responses proxy request failed", error);
+    logger.error("Responses proxy request failed", error, {
+      requestId,
+      failedStage,
+      upstreamAttempted,
+      upstreamStatus,
+      providerRequestId,
+    });
 
     return sendOpenAiError(
       response,

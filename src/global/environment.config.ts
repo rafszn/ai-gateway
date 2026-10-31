@@ -45,13 +45,13 @@ const envSchema = z.object({
     .number()
     .int()
     .min(16)
-    .max(10_000_000)
+    .max(1_000_000)
     .default(150_000),
   FOUNDRY_DEFAULT_MAX_OUTPUT_TOKENS: z.coerce
     .number()
     .int()
     .min(16)
-    .max(10_000_000)
+    .max(1_000_000)
     .default(16_384),
 
   /* ---------- resend ---------- */
