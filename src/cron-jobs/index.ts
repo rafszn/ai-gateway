@@ -1,8 +1,10 @@
 import cron from "node-cron";
+import { expireApiKeys } from "./expire-api-keys.js";
 
 export const initCronJobs = () => {
-  // add jobs
+  void expireApiKeys();
 
-  // Schedule for every 1 hour thereafter
-  cron.schedule("0 */1 * * *", async () => {});
+  cron.schedule("0 * * * *", () => {
+    void expireApiKeys();
+  });
 };

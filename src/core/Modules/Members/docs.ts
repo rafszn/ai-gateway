@@ -143,7 +143,7 @@
  *
  *   delete:
  *     summary: Delete a team member
- *     description: Only a SUPER_ADMIN has the member delete permission.
+ *     description: Only a SUPER_ADMIN can delete a member. The operation revokes the member's API keys in the same transaction and preserves their key history.
  *     tags:
  *       - Members
  *     security:
@@ -156,7 +156,7 @@
  *           type: string
  *     responses:
  *       204:
- *         description: Member deleted
+ *         description: Member deleted and linked API keys revoked
  *       401:
  *         description: Missing, invalid, or expired token
  *       403:

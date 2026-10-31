@@ -85,7 +85,10 @@ export const deleteMember: RequestHandler<{ id: string }> = async (
   next,
 ) => {
   try {
-    await memberService.deleteMember(req.params.id);
+    await memberService.deleteMember({
+      id: req.params.id,
+      adminId: String(req.admin?.id),
+    });
     return res.status(HTTP_STATUS.NO_CONTENT).send();
   } catch (error) {
     return next(error);

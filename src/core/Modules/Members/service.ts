@@ -4,6 +4,8 @@ import type {
 } from "../../../data/models/user/index.js";
 import { UserRepository } from "../../../data/models/user/index.js";
 import { AppError } from "../../../global/middlewares/error-handler.js";
+import { ApiKeyRepository } from "../../../data/models/api-key/index.js";
+import { withTransaction } from "../../../data/transactions/mongo/index.js";
 
 function isDuplicateKeyError(error: unknown): boolean {
   return (
@@ -16,6 +18,7 @@ function isDuplicateKeyError(error: unknown): boolean {
 
 class MemberService {
   private readonly userRepository = new UserRepository();
+  private readonly apiKeyRepository = new ApiKeyRepository();
 
   async listMembers(params: { page: number; limit: number }) {
     const result = await this.userRepository.list({
@@ -72,12 +75,24 @@ class MemberService {
     }
   }
 
-  async deleteMember(id: string): Promise<void> {
-    const deletedMember = await this.userRepository.deleteById({ id });
+  async deleteMember(params: { id: string; adminId: string }): Promise<void> {
+    await withTransaction(async (session) => {
+      const deletedMember = await this.userRepository.deleteById({
+        id: params.id,
+        session,
+      });
 
-    if (!deletedMember) {
-      throw new AppError("Member not found", 404);
-    }
+      if (!deletedMember) {
+        throw new AppError("Member not found", 404);
+      }
+
+      await this.apiKeyRepository.revokeAllByMemberId({
+        memberId: params.id,
+        revokedAt: new Date(),
+        revokedByAdminId: params.adminId,
+        session,
+      });
+    });
   }
 }
 
