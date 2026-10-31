@@ -4,7 +4,7 @@ import cfg from "../global/environment.config.js";
 
 let connectionPromise: Promise<typeof mongoose> | null = null;
 
-export async function dbInit(): Promise<Connection | null> {
+export async function dbInit(): Promise<Connection> {
   if (mongoose.connection.readyState === 1) {
     return mongoose.connection;
   }
@@ -13,8 +13,7 @@ export async function dbInit(): Promise<Connection | null> {
     const uri = cfg.MONGO_URL;
 
     if (!uri) {
-      logger.info("MONGODB_URI is not configured");
-      return null;
+      throw new Error("MONGODB_URI is not configured");
     }
 
     connectionPromise = mongoose.connect(uri);

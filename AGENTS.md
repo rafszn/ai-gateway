@@ -163,7 +163,14 @@ Identify material correctness problems and edge cases before presenting an imple
 
 ## 9. Architectural Consistency
 
-Follow the established project conventions recorded in the architecture reference (or create a concise well detailed one from current repository) and confirmed in the current repository.
+### Standing conventions
+- Keep implementations simple, accurate, efficient, optimal, easy to understand, and safe. Reuse established project patterns and avoid unnecessary abstractions or layers.
+- Repository method params: 2+ params → one `params` object; 1 param → positional.
+- Mutating repo methods take optional `session?: TransactionContext` (opaque alias for the DB's tx handle, `src/data/types.ts` per service) — keeps the port DB-agnostic.
+- Impl class names never include DB engine name (`UserRepository` not `MongooseUserRepository`) — the filename (`*.mongoose-repository.ts`) carries that instead.
+- Indexes always explicit `schema.index()` calls (never rely on inline `unique:true` alone / `autoIndex` / remembering `syncIndexes()`). Index review is part of building every model.
+
+Follow the established project conventions recorded in this file and the architecture reference (or create a concise well detailed one from current repository) and confirmed in the current repository.
 
 Before introducing a new pattern, check whether an existing convention already addresses the problem.
 

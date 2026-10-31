@@ -5,7 +5,7 @@ const envFile = `.env.${process.env.NODE_ENV || "development"}`;
 dotenv.config({ path: envFile });
 
 const envSchema = z.object({
-  APP_NAME: z.string().default("platform-api"),
+  APP_NAME: z.string().default("ai-gateway"),
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
@@ -15,7 +15,17 @@ const envSchema = z.object({
     .default(5000),
 
   /* ---------- mongo ---------- */
-  MONGO_URL: z.string().optional(),
+  MONGO_URL: z.string(),
+
+  SUPER_ADMIN_USERNAME: z
+    .string()
+    .trim()
+    .min(3)
+    .max(64)
+    .regex(/^[a-zA-Z0-9._-]+$/)
+    .transform((username) => username.toLowerCase()),
+  SUPER_ADMIN_PASSWORD: z.string().min(12).max(128),
+  ADMIN_JWT_SECRET: z.string().min(32),
 
   /* ---------- resend ---------- */
   RESEND_API_KEY: z.string().optional(),
@@ -51,6 +61,10 @@ export const cfg = {
   PORT: Number(env.PORT),
   APP_NAME: env.APP_NAME,
   MONGO_URL: env.MONGO_URL,
+
+  SUPER_ADMIN_USERNAME: env.SUPER_ADMIN_USERNAME,
+  SUPER_ADMIN_PASSWORD: env.SUPER_ADMIN_PASSWORD,
+  ADMIN_JWT_SECRET: env.ADMIN_JWT_SECRET,
 
   RESEND_FROM: env.RESEND_FROM,
   RESEND_API_KEY: env.RESEND_API_KEY,
