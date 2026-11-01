@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { HTTP_STATUS } from "../constants/http-status-codes.js";
 
 export const notFoundHandler = (req: Request, res: Response) => {
-  logger.error({
+  logger.error("NOT_FOUND", {
     message: `Method [${req.method}] | Route [${req.originalUrl}] not found`,
     path: req.path,
   });

@@ -67,10 +67,9 @@ export function errorHandler(
     }
   }
 
-  logger.error({
+  logger.error("ERROR", {
     message,
     path: req.path,
-    // stack: err instanceof Error ? err.stack : undefined,
   });
 
   res.status(status).json({
