@@ -1,4 +1,5 @@
 import type { ResponsesRequest } from "./dto.js";
+import { container, injectable } from "tsyringe";
 import cfg from "../../../global/environment.config.js";
 
 export interface PreparedResponsesRequest {
@@ -39,6 +40,7 @@ function containsNonTextInput(value: unknown): boolean {
   return Object.values(value).some(containsNonTextInput);
 }
 
+@injectable()
 class ResponsesService {
   prepare(request: ResponsesRequest): PreparedResponsesRequest {
     const maxOutputTokens =
@@ -99,5 +101,5 @@ class ResponsesService {
   }
 }
 
-const responsesService = new ResponsesService();
+const responsesService = container.resolve(ResponsesService);
 export default responsesService;

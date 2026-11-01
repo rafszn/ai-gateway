@@ -35,7 +35,6 @@ export class Logger implements ILogger {
       return splat
         .map((value) => {
           if (value instanceof Error) {
-            // Console: message only. Full stack goes to logs/error.log instead.
             return includeStack
               ? (value.stack ?? value.message)
               : value.message;
@@ -56,7 +55,7 @@ export class Logger implements ILogger {
 
     const consoleFormat = format.combine(
       shared,
-      format.colorize(), // moved here -- must NOT leak into the file transport's JSON
+      format.colorize(),
       format.printf((info) => {
         const meta = buildMeta(info, false);
         return `${info.timestamp} ${info.level}: ${info.message}${meta ? ` ${meta}` : ""}`;

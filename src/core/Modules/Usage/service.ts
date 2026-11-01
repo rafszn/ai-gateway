@@ -1,11 +1,17 @@
 import type {
   UsageRecord,
   FinalUsageStatus,
+  IUsageRepository,
 } from "../../../data/models/usage/index.js";
-import { UsageRepository } from "../../../data/models/usage/index.js";
+import { container, inject, injectable } from "tsyringe";
+import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
 
+@injectable()
 class UsageService {
-  private readonly usageRepository = new UsageRepository();
+  constructor(
+    @inject(IOCTokens.UsageRepository)
+    private readonly usageRepository: IUsageRepository,
+  ) {}
 
   async start(params: {
     memberId: string;
@@ -43,5 +49,5 @@ class UsageService {
   }
 }
 
-const usageService = new UsageService();
+const usageService = container.resolve(UsageService);
 export default usageService;

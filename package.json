@@ -34,11 +34,13 @@
     "mongoose": "^9.0.1",
     "multer": "^2.1.1",
     "node-cron": "^4.2.1",
+    "reflect-metadata": "^0.2.2",
     "resend": "^6.16.0",
     "sharp": "^0.35.3",
     "streamifier": "^0.1.1",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",
+    "tsyringe": "^4.10.0",
     "winston": "^3.19.0",
     "zod": "^4.2.1"
   },

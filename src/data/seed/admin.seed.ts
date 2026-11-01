@@ -1,7 +1,9 @@
 import argon2 from "argon2";
+import { container } from "tsyringe";
 import cfg from "../../global/environment.config.js";
-import { AdminRepository } from "../models/admin/index.js";
+import { IAdminRepository } from "../models/admin/index.js";
 import type { AdminRole } from "../models/admin/admin.types.js";
+import { IOCTokens } from "../../global/constants/ioc-tokens.js";
 import { ADMIN_ROLE_PERMISSIONS } from "../../core/Modules/Admins/permissions.js";
 
 function isDuplicateKeyError(error: unknown): boolean {
@@ -14,7 +16,9 @@ function isDuplicateKeyError(error: unknown): boolean {
 }
 
 export async function seedAdminAccess(): Promise<void> {
-  const repository = new AdminRepository();
+  const repository = container.resolve<IAdminRepository>(
+    IOCTokens.AdminRepository,
+  );
   const roles: AdminRole[] = ["SUPER_ADMIN", "ADMIN"];
 
   for (const name of roles) {

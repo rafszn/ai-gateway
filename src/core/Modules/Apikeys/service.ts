@@ -1,16 +1,18 @@
 import type {
   ApiKeyLimits,
   ApiKeyRecord,
+  IApiKeyRepository,
 } from "../../../data/models/api-key/index.js";
+import {
+  TIER_LIMITS,
+  KEY_LIFETIME_MS,
+} from "../../../global/constants/default-tiers.js";
+import { container, inject, injectable } from "tsyringe";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { UserRepository } from "../../../data/models/user/index.js";
+import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
+import { IUserRepository } from "../../../data/models/user/index.js";
 import type { CreateApiKeyDTO, UpdateApiKeyLimitsDTO } from "./dto.js";
 import { AppError } from "../../../global/middlewares/error-handler.js";
-import { ApiKeyRepository } from "../../../data/models/api-key/index.js";
-import {
-  KEY_LIFETIME_MS,
-  TIER_LIMITS,
-} from "../../../global/constants/default-tiers.js";
 
 function hashSecret(secret: string): string {
   return createHash("sha256").update(secret, "utf8").digest("hex");
@@ -33,9 +35,14 @@ function effectiveStatus(key: ApiKeyRecord, now: Date): ApiKeyRecord {
   return key;
 }
 
+@injectable()
 class ApiKeyService {
-  private readonly userRepository = new UserRepository();
-  private readonly apiKeyRepository = new ApiKeyRepository();
+  constructor(
+    @inject(IOCTokens.UserRepository)
+    private readonly userRepository: IUserRepository,
+    @inject(IOCTokens.ApiKeyRepository)
+    private readonly apiKeyRepository: IApiKeyRepository,
+  ) {}
 
   private async requireMember(memberId: string): Promise<void> {
     const member = await this.userRepository.findById(memberId);
@@ -314,5 +321,5 @@ class ApiKeyService {
   }
 }
 
-const apiKeyService = new ApiKeyService();
+const apiKeyService = container.resolve(ApiKeyService);
 export default apiKeyService;

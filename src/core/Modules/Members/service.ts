@@ -1,11 +1,13 @@
 import type {
   NewUserRecord,
+  IUserRepository,
   UpdateUserRecord,
 } from "../../../data/models/user/index.js";
-import { UserRepository } from "../../../data/models/user/index.js";
+import { container, inject, injectable } from "tsyringe";
+import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
+import { TransactionRunner } from "../../../data/transactions/types.js";
 import { AppError } from "../../../global/middlewares/error-handler.js";
-import { ApiKeyRepository } from "../../../data/models/api-key/index.js";
-import { withTransaction } from "../../../data/transactions/mongo/index.js";
+import { IApiKeyRepository } from "../../../data/models/api-key/index.js";
 
 function isDuplicateKeyError(error: unknown): boolean {
   return (
@@ -16,9 +18,16 @@ function isDuplicateKeyError(error: unknown): boolean {
   );
 }
 
+@injectable()
 class MemberService {
-  private readonly userRepository = new UserRepository();
-  private readonly apiKeyRepository = new ApiKeyRepository();
+  constructor(
+    @inject(IOCTokens.UserRepository)
+    private readonly userRepository: IUserRepository,
+    @inject(IOCTokens.ApiKeyRepository)
+    private readonly apiKeyRepository: IApiKeyRepository,
+    @inject(IOCTokens.TransactionRunner)
+    private readonly transactionRunner: TransactionRunner,
+  ) {}
 
   async listMembers(params: { page: number; limit: number }) {
     const result = await this.userRepository.list({
@@ -76,7 +85,7 @@ class MemberService {
   }
 
   async deleteMember(params: { id: string; adminId: string }): Promise<void> {
-    await withTransaction(async (session) => {
+    await this.transactionRunner(async (session) => {
       const deletedMember = await this.userRepository.deleteById({
         id: params.id,
         session,
@@ -96,5 +105,5 @@ class MemberService {
   }
 }
 
-const memberService = new MemberService();
+const memberService = container.resolve(MemberService);
 export default memberService;

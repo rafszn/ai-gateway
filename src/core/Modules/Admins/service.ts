@@ -1,9 +1,13 @@
 import argon2 from "argon2";
 import jwt from "jsonwebtoken";
+import type {
+  AdminRecord,
+  IAdminRepository,
+} from "../../../data/models/admin/index.js";
 import cfg from "../../../global/environment.config.js";
 import { HOUR } from "../../../global/constants/time.js";
-import { AdminRepository } from "../../../data/models/admin/index.js";
-import type { AdminRecord } from "../../../data/models/admin/index.js";
+import { container, inject, injectable } from "tsyringe";
+import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
 import { AppError } from "../../../global/middlewares/error-handler.js";
 import { ADMIN_PERMISSIONS, type AdminPermission } from "./permissions.js";
 
@@ -29,11 +33,15 @@ function isDuplicateKeyError(error: unknown): boolean {
   );
 }
 
+@injectable()
 class AdminService {
-  private readonly adminRepository = new AdminRepository();
+  constructor(
+    @inject(IOCTokens.AdminRepository)
+    private readonly admins: IAdminRepository,
+  ) {}
 
   async login(params: { username: string; password: string }) {
-    const admin = await this.adminRepository.findByUsername(params.username);
+    const admin = await this.admins.findByUsername(params.username);
 
     if (
       !admin ||
@@ -56,13 +64,13 @@ class AdminService {
   }
 
   async resolvePrincipal(adminId: string) {
-    const admin = await this.adminRepository.findById(adminId);
+    const admin = await this.admins.findById(adminId);
 
     if (!admin || !admin.isActive) {
       return null;
     }
 
-    const role = await this.adminRepository.findRoleByName(admin.role);
+    const role = await this.admins.findRoleByName(admin.role);
 
     if (!role) {
       throw new AppError("Admin role is not configured", 500);
@@ -83,7 +91,7 @@ class AdminService {
 
   async createAdmin(params: { username: string; password: string }) {
     try {
-      const admin = await this.adminRepository.create({
+      const admin = await this.admins.create({
         record: {
           username: params.username,
           passwordHash: await argon2.hash(params.password),
@@ -103,5 +111,5 @@ class AdminService {
   }
 }
 
-const adminService = new AdminService();
+const adminService = container.resolve(AdminService);
 export default adminService;

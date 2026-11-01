@@ -6,14 +6,13 @@ import Routes from "./Routes.js";
 import compression from "compression";
 import cookieParser from "cookie-parser";
 import express, { Application } from "express";
+import { setupSwaggerDocs } from "./docs/swagger.js";
 import corsOptions from "./global/constants/cors-options.js";
 import requestLogger from "./global/middlewares/request-logger.js";
 import { notFoundHandler } from "./global/middlewares/not-found.js";
 import { errorHandler } from "./global/middlewares/error-handler.js";
 import { requestGuard } from "./global/middlewares/request-guard.js";
 import { HTTP_STATUS } from "./global/constants/http-status-codes.js";
-import { globalRateLimiter } from "./global/middlewares/rate-limiter.js";
-import { setupSwaggerDocs } from "./docs/swagger.js";
 
 export default class App {
   public app: Application;
@@ -29,10 +28,9 @@ export default class App {
     this.app.use(compression());
     this.app.use(hpp());
     this.app.use(cookieParser());
-    this.app.use(express.json({ limit: "1mb" }));
-    this.app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+    this.app.use(express.json({ limit: "100mb" }));
+    this.app.use(express.urlencoded({ extended: true, limit: "100mb" }));
     this.app.use(requestLogger);
-    this.app.use(globalRateLimiter);
     this.app.use(requestGuard); // block scanners / traversal
     this.app.use(express.static("public"));
 

@@ -1,12 +1,20 @@
+import { container, inject, injectable } from "tsyringe";
 import { MINUTE } from "../../../global/constants/time.js";
-import { cacheService } from "../../infrastructure/Cache/service.js";
+import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
+import { CacheService } from "../../infrastructure/Cache/contracts/cache.contract.js";
 
+@injectable()
 class AuthService {
   private readonly authCachePrefix = "myapp:auth";
 
+  constructor(
+    @inject(IOCTokens.CacheService)
+    private readonly cache: CacheService,
+  ) {}
+
   async createAuth() {
-    const cacheKey = cacheService.createKey(this.authCachePrefix);
-    return cacheService.getOrSet(
+    const cacheKey = this.cache.createKey(this.authCachePrefix);
+    return this.cache.getOrSet(
       cacheKey,
       async () => ({
         module: "Auth",
@@ -17,5 +25,5 @@ class AuthService {
   }
 }
 
-const authService = new AuthService();
+const authService = container.resolve(AuthService);
 export default authService;
