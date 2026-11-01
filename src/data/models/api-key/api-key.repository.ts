@@ -13,6 +13,8 @@ export interface IApiKeyRepository {
 
   findBySecretHash(secretHash: string): Promise<ApiKeyRecord | null>;
 
+  findByNormalizedName(nameNormalized: string): Promise<ApiKeyRecord[]>;
+
   listByMemberId(params: {
     limit: number;
     offset: number;

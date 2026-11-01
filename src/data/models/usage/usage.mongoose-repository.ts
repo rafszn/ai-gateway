@@ -4,6 +4,7 @@ import type {
   NewUsageRecord,
   UsageFinalization,
   TransactionContext,
+  UsageMonthlySummary,
 } from "./usage.types.js";
 import mongoose, { Schema, Types } from "mongoose";
 import type { IUsageRepository } from "./usage.repository.js";
@@ -15,6 +16,29 @@ type StoredUsageRecord = Omit<UsageRecord, "id" | "memberId" | "keyId"> & {
 };
 
 type UsageDocument = HydratedDocument<StoredUsageRecord>;
+
+interface UsageSummaryFacet {
+  totals: Array<{
+    requestCount: number;
+    pendingRequests: number;
+    succeededRequests: number;
+    failedRequests: number;
+    rejectedRequests: number;
+    interruptedRequests: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    averageLatencyMs: number | null;
+  }>;
+  byModel: Array<{
+    _id: string | null;
+    requestCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  }>;
+  recentRequests: UsageMonthlySummary["recentRequests"];
+}
 
 const usageSchema = new Schema<StoredUsageRecord>(
   {
@@ -98,7 +122,10 @@ usageSchema.index(
   { name: "usage_status_requested_asc" },
 );
 
-const UsageModel = mongoose.model<StoredUsageRecord>("ApiKeyUsage", usageSchema);
+const UsageModel = mongoose.model<StoredUsageRecord>(
+  "ApiKeyUsage",
+  usageSchema,
+);
 
 function toObjectId(value: string): Types.ObjectId {
   return new Types.ObjectId(value);
@@ -175,5 +202,132 @@ export class UsageRepository implements IUsageRepository {
     ).exec();
 
     return document ? toUsageRecord(document) : null;
+  }
+
+  async getMonthlySummary(params: {
+    keyId: string;
+    from: Date;
+    to: Date;
+  }): Promise<UsageMonthlySummary> {
+    const [result] = await UsageModel.aggregate<UsageSummaryFacet>([
+      {
+        $match: {
+          keyId: toObjectId(params.keyId),
+          requestedAt: {
+            $gte: params.from,
+            $lt: params.to,
+          },
+        },
+      },
+      {
+        $facet: {
+          totals: [
+            {
+              $group: {
+                _id: null,
+                requestCount: { $sum: 1 },
+                pendingRequests: {
+                  $sum: { $cond: [{ $eq: ["$status", "PENDING"] }, 1, 0] },
+                },
+                succeededRequests: {
+                  $sum: { $cond: [{ $eq: ["$status", "SUCCEEDED"] }, 1, 0] },
+                },
+                failedRequests: {
+                  $sum: { $cond: [{ $eq: ["$status", "FAILED"] }, 1, 0] },
+                },
+                rejectedRequests: {
+                  $sum: { $cond: [{ $eq: ["$status", "REJECTED"] }, 1, 0] },
+                },
+                interruptedRequests: {
+                  $sum: {
+                    $cond: [{ $eq: ["$status", "INTERRUPTED"] }, 1, 0],
+                  },
+                },
+                inputTokens: {
+                  $sum: { $ifNull: ["$inputTokens", 0] },
+                },
+                outputTokens: {
+                  $sum: { $ifNull: ["$outputTokens", 0] },
+                },
+                totalTokens: {
+                  $sum: { $ifNull: ["$totalTokens", 0] },
+                },
+                averageLatencyMs: { $avg: "$latencyMs" },
+              },
+            },
+          ],
+          byModel: [
+            {
+              $group: {
+                _id: "$model",
+                requestCount: { $sum: 1 },
+                inputTokens: {
+                  $sum: { $ifNull: ["$inputTokens", 0] },
+                },
+                outputTokens: {
+                  $sum: { $ifNull: ["$outputTokens", 0] },
+                },
+                totalTokens: {
+                  $sum: { $ifNull: ["$totalTokens", 0] },
+                },
+              },
+            },
+            {
+              $sort: {
+                totalTokens: -1,
+                requestCount: -1,
+              },
+            },
+          ],
+          recentRequests: [
+            { $sort: { requestedAt: -1, _id: -1 } },
+            { $limit: 20 },
+            {
+              $project: {
+                _id: 0,
+                requestedAt: 1,
+                model: 1,
+                status: 1,
+                httpStatus: 1,
+                inputTokens: 1,
+                outputTokens: 1,
+                totalTokens: 1,
+                latencyMs: 1,
+              },
+            },
+          ],
+        },
+      },
+    ]).exec();
+
+    const totals = result?.totals[0];
+
+    return {
+      requestCount: totals?.requestCount ?? 0,
+      statusCounts: {
+        pending: totals?.pendingRequests ?? 0,
+        succeeded: totals?.succeededRequests ?? 0,
+        failed: totals?.failedRequests ?? 0,
+        rejected: totals?.rejectedRequests ?? 0,
+        interrupted: totals?.interruptedRequests ?? 0,
+      },
+      foundryReportedTokens: {
+        inputTokens: totals?.inputTokens ?? 0,
+        outputTokens: totals?.outputTokens ?? 0,
+        totalTokens: totals?.totalTokens ?? 0,
+      },
+      averageLatencyMs:
+        totals?.averageLatencyMs == null
+          ? null
+          : Math.round(totals.averageLatencyMs),
+      byModel: (result?.byModel ?? []).map((item) => ({
+        model: item._id,
+        requestCount: item.requestCount,
+        inputTokens: item.inputTokens,
+        outputTokens: item.outputTokens,
+        totalTokens: item.totalTokens,
+      })),
+      recentRequests: result?.recentRequests ?? [],
+    };
   }
 }

@@ -1,4 +1,5 @@
 import {
+  PublishError,
   type DeadLetter,
   type QueueStats,
   type RetryOptions,
@@ -6,12 +7,13 @@ import {
   type MessageMetadata,
   type SubscribeOptions,
   DEFAULT_RETRY_OPTIONS,
+  type PublishQueueCapacity,
   type ResolvedRetryOptions,
 } from "./types.js";
 import { Fifo } from "./fifo.js";
 import { randomUUID } from "node:crypto";
 import logger from "../../../../config.js";
-import { QueueName } from "../contracts/queues.js";
+import type { QueueName } from "../contracts/queues.js";
 import type { EventMap, EventName } from "../contracts/event-map.js";
 
 export interface InMemoryBrokerOptions {
@@ -19,11 +21,13 @@ export interface InMemoryBrokerOptions {
   shutdownTimeoutMs?: number;
   defaultConcurrency?: number;
   defaultMaxQueueSize?: number;
-  onDropped?: (info: {
-    queue: string;
-    event: EventName;
-    messageId: string;
-  }) => void;
+  onRejected?: (
+    info: PublishQueueCapacity & {
+      event: EventName;
+      messageId: string;
+      reason: "QUEUE_FULL";
+    },
+  ) => void;
   onDeadLetter?: (deadLetter: DeadLetter) => void;
 }
 
@@ -76,16 +80,16 @@ export class InMemoryBroker {
   private readonly shutdownTimeoutMs: number;
   private readonly defaultConcurrency: number;
   private readonly defaultMaxQueueSize: number;
-  private readonly onDropped?: InMemoryBrokerOptions["onDropped"];
+  private readonly onRejected?: InMemoryBrokerOptions["onRejected"];
   private readonly onDeadLetter?: InMemoryBrokerOptions["onDeadLetter"];
 
   constructor(options: InMemoryBrokerOptions = {}) {
-    this.onDropped = options.onDropped;
+    this.onRejected = options.onRejected;
     this.onDeadLetter = options.onDeadLetter;
     this.maxDeadLetters = options.maxDeadLetters ?? 1_000;
     this.defaultConcurrency = options.defaultConcurrency ?? 10;
     this.shutdownTimeoutMs = options.shutdownTimeoutMs ?? 10_000;
-    this.defaultMaxQueueSize = options.defaultMaxQueueSize ?? 10_000;
+    this.defaultMaxQueueSize = options.defaultMaxQueueSize ?? 100_000;
 
     assertPositiveInt("maxDeadLetters", this.maxDeadLetters);
     assertPositiveInt("defaultConcurrency", this.defaultConcurrency);
@@ -99,18 +103,32 @@ export class InMemoryBroker {
   ): void {
     this.ensureOpen();
 
-    const targets = this.routes.get(event);
+    const messageId = options.messageId ?? randomUUID();
+    const targetQueues = [...(this.routes.get(event) ?? [])];
 
-    if (!targets || targets.size === 0) {
-      logger.debug(`[Messaging] "${event}" published with no subscribers.`);
-      return;
+    if (targetQueues.length === 0) {
+      throw new PublishError("NO_SUBSCRIBERS", event, messageId);
     }
 
-    const messageId = options.messageId ?? randomUUID();
+    const fullQueues = targetQueues.filter(
+      (queue) => queue.buffer.length >= queue.maxQueueSize,
+    );
+
+    if (fullQueues.length > 0) {
+      const capacities = fullQueues.map((queue) =>
+        this.reportQueueFull(queue, event, messageId),
+      );
+
+      throw new PublishError("QUEUE_FULL", event, messageId, capacities);
+    }
+
     const timestamp = Date.now();
 
-    for (const queue of targets) {
-      const envelope: Envelope = {
+    // Clone every delivery before enqueueing any of them. A clone failure
+    // therefore cannot leave only some subscriber queues with the event.
+    const deliveries = targetQueues.map((queue) => ({
+      queue,
+      envelope: {
         event,
         timestamp,
         retryCount: 0,
@@ -118,15 +136,17 @@ export class InMemoryBroker {
         correlationId: options.correlationId,
         payload: cloneOrThrow(event, payload),
         headers: options.headers && cloneOrThrow(event, options.headers),
-      };
+      },
+    }));
 
-      this.enqueue(queue, envelope);
+    for (const { queue, envelope } of deliveries) {
+      this.enqueueAccepted(queue, envelope);
     }
 
     logger.info("[Messaging] Message published", {
       event,
       messageId,
-      queues: targets.size,
+      queues: targetQueues.length,
       correlationId: options.correlationId,
     });
   }
@@ -244,6 +264,8 @@ export class InMemoryBroker {
       stats[queue.name] = {
         active: queue.active,
         buffered: queue.buffer.length,
+        maxBuffered: queue.maxQueueSize,
+        isFull: queue.buffer.length >= queue.maxQueueSize,
         retrying: queue.retrying.size,
         deadLettered: queue.deadLetters.length,
       };
@@ -316,21 +338,45 @@ export class InMemoryBroker {
 
   private enqueue(queue: QueueState, envelope: Envelope): void {
     if (queue.buffer.length >= queue.maxQueueSize) {
-      logger.error(
-        `[Messaging] Queue "${queue.name}" is full (${queue.maxQueueSize}). Dropped "${envelope.event}" ${envelope.id}.`,
-      );
-      this.safely(() =>
-        this.onDropped?.({
-          queue: queue.name,
-          event: envelope.event,
-          messageId: envelope.id,
-        }),
-      );
+      this.reportQueueFull(queue, envelope.event, envelope.id);
       return;
     }
 
+    this.enqueueAccepted(queue, envelope);
+  }
+
+  private enqueueAccepted(queue: QueueState, envelope: Envelope): void {
     queue.buffer.push(envelope);
     this.schedule(queue);
+  }
+
+  private reportQueueFull(
+    queue: QueueState,
+    event: EventName,
+    messageId: string,
+  ): PublishQueueCapacity {
+    const capacity: PublishQueueCapacity = {
+      queue: queue.name,
+      buffered: queue.buffer.length,
+      maxBuffered: queue.maxQueueSize,
+    };
+
+    logger.error(
+      `[Messaging] Queue "${queue.name}" is full ` +
+        `(${capacity.buffered}/${capacity.maxBuffered}); ` +
+        `publication "${event}" ${messageId} rejected.`,
+    );
+
+    this.safely(() =>
+      this.onRejected?.({
+        ...capacity,
+        event,
+        messageId,
+        reason: "QUEUE_FULL",
+      }),
+    );
+
+    return capacity;
   }
 
   /** Defer the pump so `publish()` returns before any handler starts. */

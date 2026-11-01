@@ -37,5 +37,39 @@ export interface UsageFinalization {
   quotaReservationId: string | null;
 }
 
+export interface UsageMonthlySummary {
+  requestCount: number;
+  statusCounts: {
+    pending: number;
+    succeeded: number;
+    failed: number;
+    rejected: number;
+    interrupted: number;
+  };
+  foundryReportedTokens: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  averageLatencyMs: number | null;
+  byModel: Array<{
+    model: string | null;
+    requestCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  }>;
+  recentRequests: Array<{
+    requestedAt: Date;
+    model: string | null;
+    status: UsageStatus;
+    httpStatus: number | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens: number | null;
+    latencyMs: number | null;
+  }>;
+}
+
 /** Opaque transaction handle. */
 export type TransactionContext = unknown;

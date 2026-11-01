@@ -6,8 +6,9 @@ export class Publisher implements IPublisher {
   constructor(private readonly broker: InMemoryBroker) {}
 
   /**
-   * Resolves once the message is enqueued for every subscribed queue.
-   * Handlers run later and their failures never reach the publisher.
+   * Resolves after enqueueing into every subscribed queue.
+   * Rejects if there are no subscribers or any target queue is full.
+   * Handler execution and its failures happen after this promise resolves.
    */
   public async publish<K extends EventName>(
     event: K,

@@ -1,8 +1,9 @@
 import type {
-  NewUsageRecord,
-  TransactionContext,
-  UsageFinalization,
   UsageRecord,
+  NewUsageRecord,
+  UsageFinalization,
+  TransactionContext,
+  UsageMonthlySummary,
 } from "./usage.types.js";
 
 export interface IUsageRepository {
@@ -15,4 +16,10 @@ export interface IUsageRepository {
     changes: UsageFinalization;
     session?: TransactionContext;
   }): Promise<UsageRecord | null>;
+
+  getMonthlySummary(params: {
+    keyId: string;
+    from: Date;
+    to: Date;
+  }): Promise<UsageMonthlySummary>;
 }

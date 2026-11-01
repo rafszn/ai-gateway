@@ -5,6 +5,6 @@ export const initializeMessaging = () => {
   initiateInMemoryMessaging({
     defaultConcurrency: 5,
     onDeadLetter: (dl) => logger.error("Message dead-lettered", dl),
-    onDropped: (d) => logger.error("Message dropped (queue full)", d),
+    onRejected: (d) => logger.error("Message rejected (queue full)", d),
   });
 };

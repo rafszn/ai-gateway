@@ -7,8 +7,11 @@ export type {
   MessageHandler,
   PublishOptions,
   MessageMetadata,
+  PublishErrorCode,
   SubscribeOptions,
+  PublishQueueCapacity,
 } from "./types.js";
+export { PublishError } from "./types.js";
 export {
   InMemoryBroker,
   type InMemoryBrokerOptions,

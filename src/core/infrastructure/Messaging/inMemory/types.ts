@@ -1,4 +1,4 @@
-import { QueueName } from "../contracts/queues.js";
+import type { QueueName } from "../contracts/queues.js";
 import type { EventMap, EventName } from "../contracts/event-map.js";
 
 export interface MessageMetadata {
@@ -31,7 +31,7 @@ export const DEFAULT_RETRY_OPTIONS: ResolvedRetryOptions = {
 export interface SubscribeOptions {
   /** Max handlers running at once for this queue. Equivalent of RabbitMQ prefetch. */
   concurrency?: number;
-  /** Max buffered (not yet started) messages. Overflow is dropped and reported. */
+  /** Maximum buffered messages for new publishes. A full queue rejects the publish. */
   maxQueueSize?: number;
   /** Delayed retry with exponential backoff. Omit to dead-letter on first failure. */
   retry?: RetryOptions;
@@ -42,6 +42,38 @@ export interface PublishOptions {
   persistent?: boolean;
   correlationId: string;
   headers?: Record<string, unknown>;
+}
+
+export type PublishErrorCode = "NO_SUBSCRIBERS" | "QUEUE_FULL";
+
+export interface PublishQueueCapacity {
+  queue: string;
+  buffered: number;
+  maxBuffered: number;
+}
+
+export class PublishError extends Error {
+  constructor(
+    public readonly code: PublishErrorCode,
+    public readonly event: EventName,
+    public readonly messageId: string,
+    public readonly queues: readonly PublishQueueCapacity[] = [],
+  ) {
+    const queueSummary = queues
+      .map(
+        ({ queue, buffered, maxBuffered }) =>
+          `${queue} (${buffered}/${maxBuffered})`,
+      )
+      .join(", ");
+
+    const message =
+      code === "NO_SUBSCRIBERS"
+        ? `Cannot publish "${event}": no subscribers are registered.`
+        : `Cannot publish "${event}": queue capacity is full (${queueSummary}).`;
+
+    super(message);
+    this.name = "PublishError";
+  }
 }
 
 export interface DeadLetter {
@@ -57,8 +89,10 @@ export interface DeadLetter {
 
 export interface QueueStats {
   active: number;
+  isFull: boolean;
   retrying: number;
   buffered: number;
+  maxBuffered: number;
   deadLettered: number;
 }
 
@@ -68,6 +102,10 @@ export type MessageHandler<K extends EventName> = (
 ) => Promise<void> | void;
 
 export interface IPublisher {
+  /**
+   * Rejects with PublishError if there are no subscribers or any target queue
+   * lacks buffer capacity. Resolving confirms enqueue only, not handler success.
+   */
   publish<K extends EventName>(
     event: K,
     payload: EventMap[K],

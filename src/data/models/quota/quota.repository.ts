@@ -2,6 +2,7 @@ import type {
   QuotaReserveResult,
   TransactionContext,
   QuotaReservationRecord,
+  QuotaUsageSnapshot,
 } from "./quota.types.js";
 import type { ApiKeyLimits } from "../api-key/api-key.types.js";
 
@@ -34,4 +35,9 @@ export interface IQuotaRepository {
     reservationId: string;
     session?: TransactionContext;
   }): Promise<boolean>;
+
+  getCurrentUsage(params: {
+    keyId: string;
+    now: Date;
+  }): Promise<QuotaUsageSnapshot>;
 }

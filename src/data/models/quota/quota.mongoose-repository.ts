@@ -3,6 +3,7 @@ import type {
   QuotaReserveResult,
   TransactionContext,
   QuotaReservationRecord,
+  QuotaUsageSnapshot,
 } from "./quota.types.js";
 import mongoose, { Schema, Types } from "mongoose";
 import type { ClientSession, HydratedDocument } from "mongoose";
@@ -380,6 +381,51 @@ export class QuotaRepository implements IQuotaRepository {
     }
 
     return query.exec();
+  }
+
+  async getCurrentUsage(params: {
+    keyId: string;
+    now: Date;
+  }): Promise<QuotaUsageSnapshot> {
+    const periods = getPeriods(params.now);
+    const counter = await this.findCounter(toObjectId(params.keyId));
+
+    if (!counter) {
+      return {
+        tokensPerMinute: 0,
+        dailyTokens: 0,
+        weeklyTokens: 0,
+        monthlyTokens: 0,
+        nextTpmTokenExpiryAt: null,
+      };
+    }
+
+    const cutoff = params.now.getTime() - TPM_WINDOW_MS;
+    const activeTpmEvents = counter.tpmEvents.filter(
+      (event) => event.at.getTime() > cutoff,
+    );
+
+    const nextTpmTokenExpiryAt = activeTpmEvents.reduce<Date | null>(
+      (earliestExpiry, event) => {
+        const expiry = new Date(event.at.getTime() + TPM_WINDOW_MS);
+
+        return !earliestExpiry || expiry < earliestExpiry
+          ? expiry
+          : earliestExpiry;
+      },
+      null,
+    );
+
+    return {
+      tokensPerMinute: getTpmUsage(activeTpmEvents),
+      dailyTokens:
+        counter.daily.period === periods.daily ? counter.daily.tokens : 0,
+      weeklyTokens:
+        counter.weekly.period === periods.weekly ? counter.weekly.tokens : 0,
+      monthlyTokens:
+        counter.monthly.period === periods.monthly ? counter.monthly.tokens : 0,
+      nextTpmTokenExpiryAt,
+    };
   }
 
   private async findReservation(

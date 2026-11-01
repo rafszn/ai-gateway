@@ -168,6 +168,11 @@ apiKeySchema.index(
   { name: "api_key_status_expiry" },
 );
 
+apiKeySchema.index(
+  { nameNormalized: 1 },
+  { name: "api_key_public_name_lookup" },
+);
+
 const ApiKeyModel = mongoose.model<ApiKeyDocument>("ApiKey", apiKeySchema);
 
 function toApiKeyRecord(document: ApiKeyDocument): ApiKeyRecord {
@@ -226,6 +231,14 @@ export class ApiKeyRepository implements IApiKeyRepository {
     const document = await ApiKeyModel.findOne({ secretHash }).exec();
 
     return document ? toApiKeyRecord(document) : null;
+  }
+
+  async findByNormalizedName(nameNormalized: string): Promise<ApiKeyRecord[]> {
+    const documents = await ApiKeyModel.find({ nameNormalized })
+      .limit(2)
+      .exec();
+
+    return documents.map(toApiKeyRecord);
   }
 
   async listByMemberId(params: {

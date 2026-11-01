@@ -12,6 +12,14 @@ export interface QuotaPeriods {
   monthly: string;
 }
 
+export interface QuotaUsageSnapshot {
+  tokensPerMinute: number;
+  dailyTokens: number;
+  weeklyTokens: number;
+  monthlyTokens: number;
+  nextTpmTokenExpiryAt: Date | null;
+}
+
 export interface QuotaReservationRecord {
   id: string;
   keyId: string;
