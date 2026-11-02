@@ -198,9 +198,9 @@ class UsageService {
           byStatus: monthSummary.statusCounts,
         },
         foundryReportedTokens: monthSummary.foundryReportedTokens,
-        averageLatencyMs: monthSummary.averageLatencyMs,
-        byModel: monthSummary.byModel,
-        recentRequests: monthSummary.recentRequests,
+        /* averageLatencyMs: monthSummary.averageLatencyMs, */
+        /* byModel: monthSummary.byModel, */
+        /* recentRequests: monthSummary.recentRequests, */
       },
     };
   }
