@@ -419,14 +419,11 @@ export const createResponse: RequestHandler = async (request, response) => {
 
     stage = "request_estimation";
     const preparedRequest = responsesService.prepare(body);
-    const reservedOutputTokens =
-      typeof body.max_output_tokens === "number"
-        ? body.max_output_tokens
-        : cfg.FOUNDRY_DEFAULT_MAX_OUTPUT_TOKENS;
-    const estimatedInputTokens = Math.max(
-      0,
-      preparedRequest.estimatedTokens - reservedOutputTokens,
-    );
+    const {
+      estimatedInputTokens,
+      reservedOutputTokens,
+      outputReservationSource,
+    } = preparedRequest;
 
     reservedTokens = preparedRequest.estimatedTokens;
 
@@ -435,8 +432,10 @@ export const createResponse: RequestHandler = async (request, response) => {
       model,
       estimatedInputTokens,
       reservedOutputTokens,
-      estimatedTotalTokens: preparedRequest.estimatedTokens,
+      outputReservationSource,
       maxRequestTokens: cfg.FOUNDRY_MAX_REQUEST_TOKENS,
+      estimatedTotalTokens: preparedRequest.estimatedTokens,
+      clientSentMaxOutputTokens: Object.hasOwn(body, "max_output_tokens"),
     });
 
     if (preparedRequest.estimatedTokens > cfg.FOUNDRY_MAX_REQUEST_TOKENS) {
