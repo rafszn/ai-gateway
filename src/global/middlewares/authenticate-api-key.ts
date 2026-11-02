@@ -18,7 +18,7 @@ function rejectApiKey(
   requestId: string,
   reason: string,
 ) {
-  logger.warn("Responses API key authentication rejected", {
+  logger.warn("API key authentication rejected", {
     requestId,
     reason,
   });
@@ -71,7 +71,7 @@ export const authenticateApiKey: RequestHandler = async (
       requestStartedAt,
     } satisfies GatewayApiKeyContext;
 
-    logger.info("Responses API key authenticated", {
+    logger.info("API key authenticated", {
       requestId,
       memberId: authenticated.memberId,
       keyId: authenticated.key.id,
@@ -79,7 +79,7 @@ export const authenticateApiKey: RequestHandler = async (
 
     return next();
   } catch (error) {
-    logger.error("Responses API key lookup failed", error, { requestId });
+    logger.error("API key lookup failed", error, { requestId });
     return next(error);
   }
 };

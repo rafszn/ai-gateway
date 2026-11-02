@@ -200,6 +200,14 @@ The API key Mongoose adapter converts the member and administrator reference str
 
 An expired, revoked, or otherwise inactive key should receive the same generic 401 response as an invalid key. A 404 would misrepresent the credential failure and could expose key state. Limit exhaustion remains a 429. The source schedules expiry hourly and permits reactivation only after expiry. The reserved estimate is supplied by the future proxy; the exact tokenizer or estimator and the explicit per request maximum are not selected.
 
+## Codex model discovery endpoint
+
+**PROPOSED; application changes are returned in chat and are not applied.** A user supplied Codex 0.166 request log showing `GET /v1/models?api-version=2025-03-01-preview&client_version=0.166.0` and linked the Codex `rust-v0.166.0` model catalog. Inspection of that Codex version's model provider and protocol source confirms the endpoint response uses `{ "models": [ModelInfo, ...] }`, matching the linked catalog format.
+
+The proposed `/v1/models` route authenticates with the gateway API key, returns catalog metadata only for models assigned to that key, and changes each catalog `slug` to its Foundry deployment name with the `-1` suffix. It accepts the `api-version` and `client_version` query parameters without forwarding them. The route is rate limited by client IP. The repository currently has no local `models.json` and no `/models` route. The proposed module expects the linked catalog at `src/core/Modules/Models/models.json`. The linked 0.166 catalog does not contain `gpt-5.1-mini`, so that deployment needs its own Codex metadata entry before this route can list it.
+
+Proposed paths: `src/core/Modules/Models/models.json`, `controller.ts`, `routes.ts`, and `docs.ts`; updates to `src/Routes.ts` and `src/global/middlewares/authenticate-api-key.ts` for route registration and feature neutral authentication logs. No build or tests were run.
+
 ## Handoff
 
 The Responses proxy and usage model files are now present in the working tree, including `src/core/Modules/Responses/routes.ts`, `controller.ts`, `service.ts`, `dto.ts`, `docs.ts`; `src/core/Modules/Usage/service.ts`; and `src/data/models/usage/usage.types.ts`, `usage.repository.ts`, `usage.mongoose-repository.ts`, and `index.ts`. `src/Routes.ts` mounts the Responses router, and its router applies API key authentication. Static inspection confirms quota reservation and response usage finalization are connected in the controller. These findings establish source presence only, not successful typechecking or runtime behavior.
