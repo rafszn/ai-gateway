@@ -45,7 +45,7 @@ const envSchema = z.object({
     .number()
     .int()
     .min(16)
-    .max(1_000_000)
+    .max(1_200_000)
     .default(150_000),
   FOUNDRY_DEFAULT_OUTPUT_RESERVATION_TOKENS: z.coerce
     .number()

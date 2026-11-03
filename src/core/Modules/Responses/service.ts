@@ -2,6 +2,8 @@ import type { ResponsesRequest } from "./dto.js";
 import { container, injectable } from "tsyringe";
 import cfg from "../../../global/environment.config.js";
 
+const BYTES_PER_TOKEN = 6;
+
 type OutputReservationSource = "client" | "gateway_default";
 
 export interface PreparedResponsesRequest {
@@ -74,7 +76,10 @@ class ResponsesService {
 
     const estimatedInputTokens = needsFullInputReservation
       ? Math.max(0, cfg.FOUNDRY_MAX_REQUEST_TOKENS - reservedOutputTokens)
-      : Math.ceil(Buffer.byteLength(JSON.stringify(inputPayload), "utf8") / 2);
+      : Math.ceil(
+          Buffer.byteLength(JSON.stringify(inputPayload), "utf8") /
+            BYTES_PER_TOKEN,
+        );
 
     const estimatedTokens = estimatedInputTokens + reservedOutputTokens;
 
