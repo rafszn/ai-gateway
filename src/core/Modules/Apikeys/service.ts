@@ -8,7 +8,7 @@ import {
   KEY_LIFETIME_MS,
 } from "../../../global/constants/default-tiers.js";
 import { container, inject, injectable } from "tsyringe";
-import { SECOND } from "../../../global/constants/time.js";
+import { MINUTE, SECOND } from "../../../global/constants/time.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
 import type { CreateApiKeyDTO, UpdateApiKeyLimitsDTO } from "./dto.js";
@@ -17,7 +17,7 @@ import type { IUserRepository } from "../../../data/models/user/index.js";
 import type { IApiKeyAuthCache } from "./contracts/api-key-auth-cache.contract.js";
 
 const NEGATIVE_AUTH_CACHE_TTL_MS = 5 * SECOND;
-const POSITIVE_AUTH_CACHE_TTL_MS = 45 * SECOND;
+const POSITIVE_AUTH_CACHE_TTL_MS = 5 * MINUTE;
 
 function hashSecret(secret: string): string {
   return createHash("sha256").update(secret, "utf8").digest("hex");

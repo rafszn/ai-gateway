@@ -542,13 +542,21 @@ export class InMemoryQuotaStoreAdapter implements IQuotaStore {
     }
 
     const flushPromise = (async () => {
+      const mongoWriteStartedAt = Date.now();
       await this.quotaRepository.upsertCounters({ counters });
+      const mongoWriteDurationMs = Date.now() - mongoWriteStartedAt;
 
       for (const [keyId, revision] of capturedRevisions) {
         if ((this.revisions.get(keyId) ?? 0) === revision) {
           this.dirtyKeyIds.delete(keyId);
         }
       }
+
+      logger.info("[QUOTA] Counter snapshots flushed successfully", {
+        counterCount: counters.length,
+        mongoWriteDurationMs,
+        dirtyKeyCountAfterFlush: this.dirtyKeyIds.size,
+      });
     })();
 
     this.flushPromise = flushPromise;
