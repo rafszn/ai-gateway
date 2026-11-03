@@ -14,6 +14,7 @@ import { AppError } from "../../../global/middlewares/error-handler.js";
 import type { IQuotaRepository } from "../../../data/models/quota/index.js";
 
 const DAY_MS = 1 * DAY;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const TPM_WINDOW_MS = 1 * MINUTE;
 
 function getUtcMonthRange(now: Date): { from: Date; to: Date } {
@@ -54,11 +55,13 @@ function buildWindow(params: {
     window: params.window,
     startsAt: params.startsAt,
     resetsAt: params.resetsAt,
-    usedTokens: params.usedTokens,
-    limitTokens: params.limitTokens,
+    /* usedTokens: params.usedTokens,*/
+    /* limitTokens: params.limitTokens, */
+    /* 
     usagePercent: (params.usedTokens / params.limitTokens) * 100,
     remainingTokens: Math.max(0, params.limitTokens - params.usedTokens),
-    usagePercentReadable: `${((params.usedTokens / params.limitTokens) * 100).toFixed(8)}%`,
+    */
+    usagePercentReadable: `${((params.usedTokens / params.limitTokens) * 100).toFixed(2)}%`,
   };
 }
 
@@ -139,6 +142,7 @@ class UsageService {
     const month = getUtcMonthRange(now);
     const calendar = getUtcCalendarWindows(now);
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [quotaUsage, monthSummary] = await Promise.all([
       this.quotaRepository.getCurrentUsage({
         keyId: key.id,
@@ -161,6 +165,7 @@ class UsageService {
       },
       quotaAccounting: "Quota usage includes active reservations.",
       quota: {
+        /* 
         tokensPerMinute: buildWindow({
           window: "rolling_60_seconds",
           startsAt: new Date(now.getTime() - TPM_WINDOW_MS),
@@ -168,6 +173,7 @@ class UsageService {
           usedTokens: quotaUsage.tokensPerMinute,
           limitTokens: key.limits.tokensPerMinute,
         }),
+        */
         daily: buildWindow({
           window: "utc_calendar_day",
           startsAt: calendar.dailyStart,
@@ -190,6 +196,7 @@ class UsageService {
           limitTokens: key.limits.monthlyTokens,
         }),
       },
+      /* 
       monthToDate: {
         startsAt: month.from,
         resetsAt: month.to,
@@ -197,11 +204,12 @@ class UsageService {
           total: monthSummary.requestCount,
           byStatus: monthSummary.statusCounts,
         },
-        foundryReportedTokens: monthSummary.foundryReportedTokens,
-        /* averageLatencyMs: monthSummary.averageLatencyMs, */
-        /* byModel: monthSummary.byModel, */
-        /* recentRequests: monthSummary.recentRequests, */
-      },
+         foundryReportedTokens: monthSummary.foundryReportedTokens,
+        averageLatencyMs: monthSummary.averageLatencyMs,
+      byModel: monthSummary.byModel, 
+        recentRequests: monthSummary.recentRequests, 
+      } 
+      */
     };
   }
 }
