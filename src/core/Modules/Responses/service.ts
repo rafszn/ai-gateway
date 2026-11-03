@@ -2,7 +2,7 @@ import type { ResponsesRequest } from "./dto.js";
 import { container, injectable } from "tsyringe";
 import cfg from "../../../global/environment.config.js";
 
-const BYTES_PER_TOKEN = 4.6;
+const BYTES_PER_TOKEN = 5.1;
 
 type OutputReservationSource = "client" | "gateway_default";
 
