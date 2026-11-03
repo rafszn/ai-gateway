@@ -11,7 +11,7 @@ import { container, inject, injectable } from "tsyringe";
 import { DAY, MINUTE } from "../../../global/constants/time.js";
 import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
 import { AppError } from "../../../global/middlewares/error-handler.js";
-import type { IQuotaRepository } from "../../../data/models/quota/index.js";
+import type { IQuotaStore } from "../Quotas/contracts/quota-store.contract.js";
 
 const DAY_MS = 1 * DAY;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -76,14 +76,14 @@ function getCurrentKeyStatus(key: ApiKeyRecord, now: Date) {
 @injectable()
 class UsageService {
   constructor(
+    @inject(IOCTokens.QuotaStore)
+    private readonly quotaStore: IQuotaStore,
+
     @inject(IOCTokens.UsageRepository)
     private readonly usageRepository: IUsageRepository,
 
     @inject(IOCTokens.ApiKeyRepository)
     private readonly apiKeyRepository: IApiKeyRepository,
-
-    @inject(IOCTokens.QuotaRepository)
-    private readonly quotaRepository: IQuotaRepository,
   ) {}
 
   async start(params: {
@@ -144,7 +144,7 @@ class UsageService {
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [quotaUsage, monthSummary] = await Promise.all([
-      this.quotaRepository.getCurrentUsage({
+      this.quotaStore.getCurrentUsage({
         keyId: key.id,
         now,
       }),

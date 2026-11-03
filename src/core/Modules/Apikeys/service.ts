@@ -8,11 +8,16 @@ import {
   KEY_LIFETIME_MS,
 } from "../../../global/constants/default-tiers.js";
 import { container, inject, injectable } from "tsyringe";
+import { SECOND } from "../../../global/constants/time.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
-import { IUserRepository } from "../../../data/models/user/index.js";
 import type { CreateApiKeyDTO, UpdateApiKeyLimitsDTO } from "./dto.js";
 import { AppError } from "../../../global/middlewares/error-handler.js";
+import type { IUserRepository } from "../../../data/models/user/index.js";
+import type { IApiKeyAuthCache } from "./contracts/api-key-auth-cache.contract.js";
+
+const NEGATIVE_AUTH_CACHE_TTL_MS = 5 * SECOND;
+const POSITIVE_AUTH_CACHE_TTL_MS = 45 * SECOND;
 
 function hashSecret(secret: string): string {
   return createHash("sha256").update(secret, "utf8").digest("hex");
@@ -40,6 +45,8 @@ class ApiKeyService {
   constructor(
     @inject(IOCTokens.UserRepository)
     private readonly userRepository: IUserRepository,
+    @inject(IOCTokens.ApiKeyAuthCache)
+    private readonly apiKeyAuthCache: IApiKeyAuthCache,
     @inject(IOCTokens.ApiKeyRepository)
     private readonly apiKeyRepository: IApiKeyRepository,
   ) {}
@@ -80,9 +87,22 @@ class ApiKeyService {
     return key;
   }
 
+  private async cacheRejectedSecret(
+    secretHash: string,
+    key?: Pick<ApiKeyRecord, "id" | "memberId">,
+  ): Promise<void> {
+    await this.apiKeyAuthCache.set({
+      secretHash,
+      value: null,
+      keyId: key?.id,
+      memberId: key?.memberId,
+      ttlMs: NEGATIVE_AUTH_CACHE_TTL_MS,
+    });
+  }
+
   async createKey(params: {
-    memberId: string;
     adminId: string;
+    memberId: string;
     input: CreateApiKeyDTO;
   }): Promise<{ key: ApiKeyRecord; secret: string }> {
     await this.requireMember(params.memberId);
@@ -168,6 +188,7 @@ class ApiKeyService {
         throw new AppError("API key not found", 404);
       }
 
+      await this.apiKeyAuthCache.invalidateKey(key.id);
       return effectiveStatus(key, new Date());
     } catch (error) {
       if (isDuplicateKeyError(error)) {
@@ -194,6 +215,7 @@ class ApiKeyService {
       throw new AppError("API key not found", 404);
     }
 
+    await this.apiKeyAuthCache.invalidateKey(key.id);
     return effectiveStatus(key, new Date());
   }
 
@@ -210,6 +232,7 @@ class ApiKeyService {
       throw new AppError("API key not found", 404);
     }
 
+    await this.apiKeyAuthCache.invalidateKey(key.id);
     return effectiveStatus(key, new Date());
   }
 
@@ -221,6 +244,7 @@ class ApiKeyService {
     const current = await this.getKey(params);
 
     if (current.status === "REVOKED") {
+      await this.apiKeyAuthCache.invalidateKey(current.id);
       return current;
     }
 
@@ -232,6 +256,7 @@ class ApiKeyService {
     });
 
     if (key) {
+      await this.apiKeyAuthCache.invalidateKey(key.id);
       return key;
     }
 
@@ -263,6 +288,7 @@ class ApiKeyService {
     });
 
     if (key) {
+      await this.apiKeyAuthCache.invalidateKey(key.id);
       return key;
     }
 
@@ -287,6 +313,8 @@ class ApiKeyService {
     if (!deleted) {
       throw new AppError("API key not found", 404);
     }
+
+    await this.apiKeyAuthCache.invalidateKey(params.keyId);
   }
 
   async authenticateSecret(
@@ -296,28 +324,62 @@ class ApiKeyService {
       return null;
     }
 
-    const key = await this.apiKeyRepository.findBySecretHash(
-      hashSecret(secret),
-    );
+    const secretHash = hashSecret(secret);
+    const cached = await this.apiKeyAuthCache.get(secretHash);
 
-    if (
-      !key ||
-      key.status !== "ACTIVE" ||
-      key.expiresAt.getTime() <= Date.now()
-    ) {
+    if (cached.hit) {
+      if (!cached.value) {
+        return null;
+      }
+
+      const now = Date.now();
+      const cachedKey = cached.value.key;
+
+      if (
+        cachedKey.status !== "ACTIVE" ||
+        cachedKey.expiresAt.getTime() <= now
+      ) {
+        await this.cacheRejectedSecret(secretHash, {
+          id: cachedKey.id,
+          memberId: cachedKey.memberId,
+        });
+        return null;
+      }
+
+      return cached.value;
+    }
+
+    const key = await this.apiKeyRepository.findBySecretHash(secretHash);
+
+    if (!key) {
+      await this.cacheRejectedSecret(secretHash);
+      return null;
+    }
+
+    if (key.status !== "ACTIVE" || key.expiresAt.getTime() <= Date.now()) {
+      await this.cacheRejectedSecret(secretHash, key);
       return null;
     }
 
     const member = await this.userRepository.findById(key.memberId);
 
     if (!member) {
+      await this.cacheRejectedSecret(secretHash, key);
       return null;
     }
 
-    return {
+    const authenticated = {
       memberId: key.memberId,
       key,
     };
+
+    await this.apiKeyAuthCache.set({
+      secretHash,
+      value: authenticated,
+      ttlMs: POSITIVE_AUTH_CACHE_TTL_MS,
+    });
+
+    return authenticated;
   }
 }
 

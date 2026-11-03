@@ -7,7 +7,8 @@ import { container, inject, injectable } from "tsyringe";
 import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
 import { TransactionRunner } from "../../../data/transactions/types.js";
 import { AppError } from "../../../global/middlewares/error-handler.js";
-import { IApiKeyRepository } from "../../../data/models/api-key/index.js";
+import type { IApiKeyRepository } from "../../../data/models/api-key/index.js";
+import type { IApiKeyAuthCache } from "../Apikeys/contracts/api-key-auth-cache.contract.js";
 
 function isDuplicateKeyError(error: unknown): boolean {
   return (
@@ -23,6 +24,8 @@ class MemberService {
   constructor(
     @inject(IOCTokens.UserRepository)
     private readonly userRepository: IUserRepository,
+    @inject(IOCTokens.ApiKeyAuthCache)
+    private readonly apiKeyAuthCache: IApiKeyAuthCache,
     @inject(IOCTokens.ApiKeyRepository)
     private readonly apiKeyRepository: IApiKeyRepository,
     @inject(IOCTokens.TransactionRunner)
@@ -102,6 +105,8 @@ class MemberService {
         session,
       });
     });
+
+    await this.apiKeyAuthCache.invalidateMember(params.id);
   }
 }
 

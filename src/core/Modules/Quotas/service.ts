@@ -1,22 +1,12 @@
-import type {
-  IQuotaRepository,
-  QuotaReserveResult,
-  QuotaReservationRecord,
-} from "../../../data/models/quota/index.js";
 import { randomUUID } from "node:crypto";
+import type {
+  QuotaUsageSnapshot,
+  QuotaReservationRecord,
+} from "../../../data/models/quota/quota.types.js";
 import { container, inject, injectable } from "tsyringe";
 import { IOCTokens } from "../../../global/constants/ioc-tokens.js";
-import { TransactionRunner } from "../../../data/transactions/types.js";
+import type { IQuotaStore } from "./contracts/quota-store.contract.js";
 import type { ApiKeyLimits } from "../../../data/models/api-key/api-key.types.js";
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === 11000
-  );
-}
 
 function assertPositiveSafeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -33,10 +23,8 @@ function assertNonNegativeSafeInteger(value: number, name: string): void {
 @injectable()
 class QuotaService {
   constructor(
-    @inject(IOCTokens.QuotaRepository)
-    private readonly quotaRepository: IQuotaRepository,
-    @inject(IOCTokens.TransactionRunner)
-    private readonly transactionRunner: TransactionRunner,
+    @inject(IOCTokens.QuotaStore)
+    private readonly quotaStore: IQuotaStore,
   ) {}
 
   async reserve(params: {
@@ -44,30 +32,14 @@ class QuotaService {
     memberId: string;
     limits: ApiKeyLimits;
     reservedTokens: number;
-  }): Promise<QuotaReserveResult> {
+  }) {
     assertPositiveSafeInteger(params.reservedTokens, "reservedTokens");
 
-    const reservationId = randomUUID();
-    const now = new Date();
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        return await this.transactionRunner((session) =>
-          this.quotaRepository.reserve({
-            now,
-            ...params,
-            reservationId,
-            session,
-          }),
-        );
-      } catch (error) {
-        if (!isDuplicateKeyError(error) || attempt === 2) {
-          throw error;
-        }
-      }
-    }
-
-    throw new Error("Quota reservation could not be completed");
+    return this.quotaStore.reserve({
+      ...params,
+      reservationId: randomUUID(),
+      now: new Date(),
+    });
   }
 
   async completeWithUsage(params: {
@@ -76,35 +48,33 @@ class QuotaService {
   }): Promise<QuotaReservationRecord | null> {
     assertNonNegativeSafeInteger(params.actualTokens, "actualTokens");
 
-    return this.transactionRunner((session) =>
-      this.quotaRepository.completeWithUsage({
-        ...params,
-        completedAt: new Date(),
-        session,
-      }),
-    );
+    return this.quotaStore.settle({
+      ...params,
+      completedAt: new Date(),
+    });
   }
 
   async completeWithoutUsage(
     reservationId: string,
   ): Promise<QuotaReservationRecord | null> {
-    return this.transactionRunner((session) =>
-      this.quotaRepository.completeWithoutUsage({
-        reservationId,
-        completedAt: new Date(),
-        session,
-      }),
-    );
+    return this.quotaStore.settleEstimate({
+      reservationId,
+      completedAt: new Date(),
+    });
   }
 
   async releaseBeforeUpstream(reservationId: string): Promise<boolean> {
-    return this.transactionRunner((session) =>
-      this.quotaRepository.releaseBeforeUpstream({
-        reservationId,
-        completedAt: new Date(),
-        session,
-      }),
-    );
+    return this.quotaStore.release({
+      reservationId,
+      completedAt: new Date(),
+    });
+  }
+
+  async getCurrentUsage(params: {
+    keyId: string;
+    now: Date;
+  }): Promise<QuotaUsageSnapshot> {
+    return this.quotaStore.getCurrentUsage(params);
   }
 }
 

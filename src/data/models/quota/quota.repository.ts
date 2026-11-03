@@ -1,43 +1,10 @@
-import type {
-  QuotaReserveResult,
-  TransactionContext,
-  QuotaReservationRecord,
-  QuotaUsageSnapshot,
-} from "./quota.types.js";
-import type { ApiKeyLimits } from "../api-key/api-key.types.js";
+import type { QuotaCounterRecord, TransactionContext } from "./quota.types.js";
 
 export interface IQuotaRepository {
-  reserve(params: {
-    now: Date;
-    keyId: string;
-    memberId: string;
-    limits: ApiKeyLimits;
-    reservationId: string;
-    reservedTokens: number;
-    session?: TransactionContext;
-  }): Promise<QuotaReserveResult>;
+  findCounterByKeyId(keyId: string): Promise<QuotaCounterRecord | null>;
 
-  completeWithUsage(params: {
-    completedAt: Date;
-    actualTokens: number;
-    reservationId: string;
+  upsertCounters(params: {
+    counters: QuotaCounterRecord[];
     session?: TransactionContext;
-  }): Promise<QuotaReservationRecord | null>;
-
-  completeWithoutUsage(params: {
-    completedAt: Date;
-    reservationId: string;
-    session?: TransactionContext;
-  }): Promise<QuotaReservationRecord | null>;
-
-  releaseBeforeUpstream(params: {
-    completedAt: Date;
-    reservationId: string;
-    session?: TransactionContext;
-  }): Promise<boolean>;
-
-  getCurrentUsage(params: {
-    keyId: string;
-    now: Date;
-  }): Promise<QuotaUsageSnapshot>;
+  }): Promise<void>;
 }

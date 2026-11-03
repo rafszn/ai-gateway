@@ -23,10 +23,14 @@ import {
 import { IOCTokens } from "../../global/constants/ioc-tokens.js";
 import { withTransaction } from "../../data/transactions/mongo/index.js";
 import type { TransactionRunner } from "../../data/transactions/types.js";
+import type { IQuotaStore } from "../Modules/Quotas/contracts/quota-store.contract.js";
 import type { CacheService } from "../infrastructure/Cache/contracts/cache.contract.js";
 import { ResendMailAdapterImpl } from "../infrastructure/Mail/adapters/resend.adapter.js";
 import type { MailServiceContract } from "../infrastructure/Mail/contracts/mail.contract.js";
 import { MemoryCacheAdapterImpl } from "../infrastructure/Cache/adapters/memory-cache.adapter.js";
+import type { IApiKeyAuthCache } from "../Modules/Apikeys/contracts/api-key-auth-cache.contract.js";
+import { InMemoryQuotaStoreAdapter } from "../Modules/Quotas/adapters/in-memory-quota-store.adapter.js";
+import { InMemoryApiKeyAuthCacheAdapter } from "../Modules/Apikeys/adapters/in-memory-api-key-auth-cache.adapter.js";
 
 export const registerIoc = async (): Promise<void> => {
   container.registerSingleton<IAdminRepository>(
@@ -48,6 +52,16 @@ export const registerIoc = async (): Promise<void> => {
   container.registerSingleton<IUsageRepository>(
     IOCTokens.UsageRepository,
     UsageRepository,
+  );
+
+  container.registerSingleton<IApiKeyAuthCache>(
+    IOCTokens.ApiKeyAuthCache,
+    InMemoryApiKeyAuthCacheAdapter,
+  );
+
+  container.registerSingleton<IQuotaStore>(
+    IOCTokens.QuotaStore,
+    InMemoryQuotaStoreAdapter,
   );
 
   container.register<TransactionRunner>(IOCTokens.TransactionRunner, {

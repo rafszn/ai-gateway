@@ -637,18 +637,27 @@ export const createResponse: RequestHandler = async (request, response) => {
     });
 
     copyUpstreamHeaders(upstream, response);
-    response.status(upstream.status);
+    response.status(upstream.status).send(responseBody);
 
-    await finish({
+    void finish({
       status:
         upstream.status >= 200 && upstream.status < 300
           ? "SUCCEEDED"
           : "FAILED",
       httpStatus: upstream.status,
       usage: parsedResponseUsage,
+    }).catch((error) => {
+      logger.error(
+        "Responses finalization failed after sending the response",
+        error,
+        {
+          requestId,
+          usageId: usageRecordId,
+        },
+      );
     });
 
-    return response.send(responseBody);
+    return;
   } catch (error) {
     const failedStage = stage;
     const status = clientDisconnected ? "INTERRUPTED" : "FAILED";

@@ -12,6 +12,25 @@ export interface QuotaPeriods {
   monthly: string;
 }
 
+export interface QuotaPeriodCounter {
+  period: string;
+  tokens: number;
+}
+
+export interface QuotaTpmEvent {
+  at: Date;
+  tokens: number;
+  reservationId: string;
+}
+
+export interface QuotaCounterRecord {
+  keyId: string;
+  daily: QuotaPeriodCounter;
+  weekly: QuotaPeriodCounter;
+  monthly: QuotaPeriodCounter;
+  tpmEvents: QuotaTpmEvent[];
+}
+
 export interface QuotaUsageSnapshot {
   tokensPerMinute: number;
   dailyTokens: number;
