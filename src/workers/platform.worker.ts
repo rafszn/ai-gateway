@@ -14,8 +14,8 @@ export class PlatformWorker {
   async start(): Promise<void> {
     /** workers */
     await this.consumer.subscribe(
-      QUEUES.EMAIL,
-      "user.created",
+      QUEUES.DEFAULT,
+      "default.event",
       async (p, m) => {
         logger.info("Consumed", { payload: p, metadata: m });
       },
