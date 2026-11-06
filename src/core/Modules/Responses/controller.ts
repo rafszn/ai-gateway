@@ -261,7 +261,8 @@ export const createResponse: RequestHandler = async (request, response) => {
     if (finished) {
       return;
     }
-
+    logger.info("FOUNDRY USAGE", { usage: params.usage });
+    
     finished = true;
     const completedAt = new Date();
     const latencyMs = Math.max(0, completedAt.getTime() - startedAt);
