@@ -55,12 +55,12 @@ function buildWindow(params: {
     window: params.window,
     startsAt: params.startsAt,
     resetsAt: params.resetsAt,
-    /* usedTokens: params.usedTokens,*/
+    usedTokens: params.usedTokens,
     /* limitTokens: params.limitTokens, */
     /* 
     usagePercent: (params.usedTokens / params.limitTokens) * 100,
-    remainingTokens: Math.max(0, params.limitTokens - params.usedTokens),
     */
+    remainingTokens: Math.max(0, params.limitTokens - params.usedTokens),
     usagePercentReadable: `${((params.usedTokens / params.limitTokens) * 100).toFixed(2)}%`,
   };
 }

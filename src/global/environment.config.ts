@@ -53,6 +53,13 @@ const envSchema = z.object({
     .min(16)
     .max(1_000_000)
     .default(16_384),
+  FOUNDRY_UNKNOWN_INPUT_RESERVATION_TOKENS: z.coerce
+    .number()
+    .int()
+    .min(16)
+    .max(2_000_000)
+    .default(250_000),
+
 
   /* ---------- resend ---------- */
   RESEND_API_KEY: z.string().optional(),
@@ -98,6 +105,8 @@ export const cfg = {
   FOUNDRY_MAX_REQUEST_TOKENS: env.FOUNDRY_MAX_REQUEST_TOKENS,
   FOUNDRY_DEFAULT_OUTPUT_RESERVATION_TOKENS:
     env.FOUNDRY_DEFAULT_OUTPUT_RESERVATION_TOKENS,
+  FOUNDRY_UNKNOWN_INPUT_RESERVATION_TOKENS:
+    env.FOUNDRY_UNKNOWN_INPUT_RESERVATION_TOKENS,
 
   RESEND_FROM: env.RESEND_FROM,
   RESEND_API_KEY: env.RESEND_API_KEY,

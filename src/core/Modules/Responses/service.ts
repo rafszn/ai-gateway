@@ -75,11 +75,8 @@ class ResponsesService {
       containsNonTextInput(request.input);
 
     const estimatedInputTokens = needsFullInputReservation
-      ? Math.max(0, cfg.FOUNDRY_MAX_REQUEST_TOKENS - reservedOutputTokens)
-      : Math.ceil(
-          Buffer.byteLength(JSON.stringify(inputPayload), "utf8") /
-            BYTES_PER_TOKEN,
-        );
+     ? cfg.FOUNDRY_UNKNOWN_INPUT_RESERVATION_TOKENS
+     : Math.ceil(Buffer.byteLength(JSON.stringify(inputPayload), "utf8") / BYTES_PER_TOKEN);
 
     const estimatedTokens = estimatedInputTokens + reservedOutputTokens;
 
