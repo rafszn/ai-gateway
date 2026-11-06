@@ -31,8 +31,8 @@ export default class App {
     this.app.use(compression());
     this.app.use(hpp());
     this.app.use(cookieParser());
-    this.app.use(express.json({ limit: "100mb" }));
-    this.app.use(express.urlencoded({ extended: true, limit: "100mb" }));
+    this.app.use(express.json({ limit: "50mb" }));
+    this.app.use(express.urlencoded({ extended: true, limit: "50mb" }));
     this.app.use(requestLogger);
     this.app.use(requestGuard); // block scanners / traversal
     this.app.use(express.static("public"));

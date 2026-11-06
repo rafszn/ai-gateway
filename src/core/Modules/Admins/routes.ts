@@ -6,11 +6,17 @@ import {
 import { adminLoginSchema, createAdminSchema } from "./dto.js";
 import { validate } from "../../../global/middlewares/validator.js";
 import { createAdmin, getCurrentAdmin, loginAdmin } from "./controller.js";
+import { authRateLimiter } from "../../../global/middlewares/rate-limiter.js";
 
 const router = Router();
 
 router.get("/auth/me", authenticateAdmin, getCurrentAdmin);
-router.post("/auth/login", validate(adminLoginSchema), loginAdmin);
+router.post(
+  "/auth/login",
+  authRateLimiter,
+  validate(adminLoginSchema),
+  loginAdmin,
+);
 
 router.post(
   "/",
