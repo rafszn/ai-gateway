@@ -260,7 +260,7 @@ export const createResponse: RequestHandler = async (request, response) => {
   }): Promise<void> => {
     if (finished) {
       return;
-    }    
+    }
     finished = true;
     const completedAt = new Date();
     const latencyMs = Math.max(0, completedAt.getTime() - startedAt);
@@ -565,7 +565,6 @@ export const createResponse: RequestHandler = async (request, response) => {
       preparedRequest,
       abortController.signal,
     );
-    logger.info("FOUNDRY FULL RESPONSE", upstream);
     upstreamStatus = upstream.status;
     upstreamContentType = upstream.headers.get("content-type");
     providerRequestId =
@@ -586,6 +585,7 @@ export const createResponse: RequestHandler = async (request, response) => {
       (upstreamContentType ?? "").toLowerCase().includes("text/event-stream")
     ) {
       stage = "stream_response";
+      logger.info("FOUNDRY FULL RESPONSE", upstream);
       copyUpstreamHeaders(upstream, response);
       response.setHeader("Cache-Control", "no-cache, no-transform");
       response.setHeader("X-Accel-Buffering", "no");
