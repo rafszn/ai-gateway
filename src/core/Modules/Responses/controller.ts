@@ -260,9 +260,7 @@ export const createResponse: RequestHandler = async (request, response) => {
   }): Promise<void> => {
     if (finished) {
       return;
-    }
-    logger.info("FOUNDRY USAGE", { usage: params.usage });
-    
+    }    
     finished = true;
     const completedAt = new Date();
     const latencyMs = Math.max(0, completedAt.getTime() - startedAt);
@@ -567,6 +565,7 @@ export const createResponse: RequestHandler = async (request, response) => {
       preparedRequest,
       abortController.signal,
     );
+    logger.info("FOUNDRY FULL RESPONSE", upstream);
     upstreamStatus = upstream.status;
     upstreamContentType = upstream.headers.get("content-type");
     providerRequestId =
