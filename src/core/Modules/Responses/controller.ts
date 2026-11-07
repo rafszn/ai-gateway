@@ -399,9 +399,9 @@ export const createResponse: RequestHandler = async (request, response) => {
       totalTokens: params.usage?.totalTokens ?? null,
       usagePersisted,
       latencyMs,
-      cachedTokens: params.usage?.cachedTokens ?? null, // <-- add
-      cacheWriteTokens: params.usage?.cacheWriteTokens ?? null, // <-- add
-      reasoningTokens: params.usage?.reasoningTokens ?? null, // <-- add
+      cachedTokens: params.usage?.cachedTokens ?? null, 
+      cacheWriteTokens: params.usage?.cacheWriteTokens ?? null, 
+      reasoningTokens: params.usage?.reasoningTokens ?? null,
       actualTokenUnits,
     });
   };
