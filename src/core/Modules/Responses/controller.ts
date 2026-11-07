@@ -585,7 +585,6 @@ export const createResponse: RequestHandler = async (request, response) => {
       (upstreamContentType ?? "").toLowerCase().includes("text/event-stream")
     ) {
       stage = "stream_response";
-      logger.info("FOUNDRY FULL RESPONSE", upstream);
       copyUpstreamHeaders(upstream, response);
       response.setHeader("Cache-Control", "no-cache, no-transform");
       response.setHeader("X-Accel-Buffering", "no");
@@ -609,6 +608,7 @@ export const createResponse: RequestHandler = async (request, response) => {
         requestId,
         source: "stream",
         usage: parsedResponseUsage,
+        streamUsageTransform,
       });
 
       await finish({
