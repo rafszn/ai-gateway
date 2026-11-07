@@ -20,6 +20,13 @@ export interface UsageRecord {
   totalTokens: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+
+  /** */
+  quotaUnits: number | null;
+  cachedTokens: number | null;
+  reasoningTokens: number | null;
+  cacheWriteTokens: number | null;
+
   quotaReservationId: string | null;
 }
 
@@ -34,6 +41,13 @@ export interface UsageFinalization {
   inputTokens: number | null;
   totalTokens: number | null;
   outputTokens: number | null;
+
+  /** */
+  quotaUnits: number | null;
+  cachedTokens: number | null;
+  reasoningTokens: number | null;
+  cacheWriteTokens: number | null;
+
   quotaReservationId: string | null;
 }
 

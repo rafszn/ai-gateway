@@ -15,10 +15,18 @@ import type { UsageStatus } from "../../../data/models/usage/usage.types.js";
 import type { ApiKeyRecord } from "../../../data/models/api-key/api-key.types.js";
 import type { GatewayApiKeyContext } from "../../../global/middlewares/authenticate-api-key.js";
 
+const CACHE_READ_WEIGHT = 0.1;
+const CACHE_WRITE_WEIGHT = 1.25;
+
 interface ResponseUsage {
   inputTokens: number | null;
   outputTokens: number | null;
   totalTokens: number | null;
+
+  /** additional */
+  cachedTokens: number | null;
+  reasoningTokens: number | null;
+  cacheWriteTokens: number | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -47,11 +55,39 @@ function extractUsage(value: unknown): ResponseUsage | null {
     return null;
   }
 
+  const inputDetails = isRecord(usage.input_tokens_details)
+    ? usage.input_tokens_details
+    : null;
+  const outputDetails = isRecord(usage.output_tokens_details)
+    ? usage.output_tokens_details
+    : null;
+
   return {
     inputTokens: getTokenCount(usage.input_tokens),
     outputTokens: getTokenCount(usage.output_tokens),
     totalTokens: getTokenCount(usage.total_tokens),
+
+    cachedTokens: getTokenCount(inputDetails?.cached_tokens),
+    cacheWriteTokens: getTokenCount(inputDetails?.cache_write_tokens),
+    reasoningTokens: getTokenCount(outputDetails?.reasoning_tokens),
   };
+}
+
+function toQuotaUnits(usage: ResponseUsage): number | null {
+  if (usage.inputTokens === null || usage.outputTokens === null) {
+    return usage.totalTokens;
+  }
+
+  const cached = usage.cachedTokens ?? 0;
+  const written = usage.cacheWriteTokens ?? 0;
+  const uncached = Math.max(0, usage.inputTokens - cached - written);
+
+  return Math.ceil(
+    uncached +
+      cached * CACHE_READ_WEIGHT +
+      written * CACHE_WRITE_WEIGHT +
+      usage.outputTokens,
+  );
 }
 
 function getRequestedModel(value: unknown): string | null {
@@ -267,6 +303,8 @@ export const createResponse: RequestHandler = async (request, response) => {
     const currentReservationId = reservationId;
     reservationId = null;
 
+    const actualTokenUnits = params.usage ? toQuotaUnits(params.usage) : null;
+
     if (currentReservationId) {
       try {
         if (!upstreamAttempted) {
@@ -275,10 +313,10 @@ export const createResponse: RequestHandler = async (request, response) => {
           quotaDisposition = released
             ? "RELEASED_BEFORE_UPSTREAM"
             : "RELEASE_NOT_APPLIED";
-        } else if (params.usage && params.usage.totalTokens !== null) {
+        } else if (actualTokenUnits !== null) {
           const settled = await quotaService.completeWithUsage({
             reservationId: currentReservationId,
-            actualTokens: params.usage.totalTokens,
+            actualTokens: actualTokenUnits,
           });
           quotaDisposition = settled
             ? "SETTLED_WITH_FOUNDRY_USAGE"
@@ -296,7 +334,7 @@ export const createResponse: RequestHandler = async (request, response) => {
           reservationId: currentReservationId,
           disposition: quotaDisposition,
           reservedTokens,
-          actualTokens: params.usage?.totalTokens ?? null,
+          actualTokens: actualTokenUnits,
         });
       } catch (error) {
         quotaDisposition = "FINALIZATION_FAILED";
@@ -304,7 +342,7 @@ export const createResponse: RequestHandler = async (request, response) => {
           requestId,
           reservationId: currentReservationId,
           reservedTokens,
-          actualTokens: params.usage?.totalTokens ?? null,
+          actualTokens: actualTokenUnits,
         });
       }
     }
@@ -320,6 +358,11 @@ export const createResponse: RequestHandler = async (request, response) => {
         httpStatus: params.httpStatus,
         latencyMs,
         completedAt,
+
+        cachedTokens: params.usage?.cachedTokens ?? null,
+        cacheWriteTokens: params.usage?.cacheWriteTokens ?? null,
+        reasoningTokens: params.usage?.reasoningTokens ?? null,
+        quotaUnits: actualTokenUnits,
       });
 
       usagePersisted = finalizedUsage !== null;
@@ -356,6 +399,10 @@ export const createResponse: RequestHandler = async (request, response) => {
       totalTokens: params.usage?.totalTokens ?? null,
       usagePersisted,
       latencyMs,
+      cachedTokens: params.usage?.cachedTokens ?? null, // <-- add
+      cacheWriteTokens: params.usage?.cacheWriteTokens ?? null, // <-- add
+      reasoningTokens: params.usage?.reasoningTokens ?? null, // <-- add
+      actualTokenUnits,
     });
   };
 
@@ -608,7 +655,6 @@ export const createResponse: RequestHandler = async (request, response) => {
         requestId,
         source: "stream",
         usage: parsedResponseUsage,
-        streamUsageTransform,
       });
 
       await finish({

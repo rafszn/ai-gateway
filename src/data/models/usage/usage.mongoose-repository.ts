@@ -73,6 +73,13 @@ const usageSchema = new Schema<StoredUsageRecord>(
       default: null,
       min: 0,
     },
+
+    /** */
+    quotaUnits: { type: Number, default: null, min: 0 },
+    cachedTokens: { type: Number, default: null, min: 0 },
+    reasoningTokens: { type: Number, default: null, min: 0 },
+    cacheWriteTokens: { type: Number, default: null, min: 0 },
+
     totalTokens: {
       type: Number,
       default: null,
@@ -140,6 +147,13 @@ function toUsageRecord(document: UsageDocument): UsageRecord {
     quotaReservationId: document.quotaReservationId ?? null,
     inputTokens: document.inputTokens ?? null,
     outputTokens: document.outputTokens ?? null,
+
+    /** */
+    cachedTokens: document.cachedTokens ?? null,
+    cacheWriteTokens: document.cacheWriteTokens ?? null,
+    reasoningTokens: document.reasoningTokens ?? null,
+    quotaUnits: document.quotaUnits ?? null,
+
     totalTokens: document.totalTokens ?? null,
     status: document.status as UsageStatus,
     httpStatus: document.httpStatus ?? null,
@@ -191,6 +205,13 @@ export class UsageRepository implements IUsageRepository {
           inputTokens: params.changes.inputTokens,
           totalTokens: params.changes.totalTokens,
           outputTokens: params.changes.outputTokens,
+
+          /** */
+          quotaUnits: params.changes.quotaUnits,
+          cachedTokens: params.changes.cachedTokens,
+          reasoningTokens: params.changes.reasoningTokens,
+          cacheWriteTokens: params.changes.cacheWriteTokens,
+
           quotaReservationId: params.changes.quotaReservationId,
         },
       },

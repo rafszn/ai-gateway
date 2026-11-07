@@ -1,6 +1,6 @@
 import type {
-  FinalUsageStatus,
   IUsageRepository,
+  UsageFinalization,
   UsageRecord,
 } from "../../../data/models/usage/index.js";
 import type {
@@ -55,12 +55,12 @@ function buildWindow(params: {
     window: params.window,
     startsAt: params.startsAt,
     resetsAt: params.resetsAt,
-    usedTokens: params.usedTokens,
+    usedUnits: params.usedTokens,
     /* limitTokens: params.limitTokens, */
     /* 
     usagePercent: (params.usedTokens / params.limitTokens) * 100,
     */
-    remainingTokens: Math.max(0, params.limitTokens - params.usedTokens),
+    remainingUnits: Math.max(0, params.limitTokens - params.usedTokens),
     usagePercentReadable: `${((params.usedTokens / params.limitTokens) * 100).toFixed(2)}%`,
   };
 }
@@ -99,6 +99,12 @@ class UsageService {
         quotaReservationId: null,
         inputTokens: null,
         outputTokens: null,
+
+        cachedTokens: null,
+        cacheWriteTokens: null,
+        reasoningTokens: null,
+        quotaUnits: null,
+
         totalTokens: null,
         httpStatus: null,
         latencyMs: null,
@@ -107,17 +113,7 @@ class UsageService {
     });
   }
 
-  async finish(params: {
-    usageId: string;
-    completedAt: Date;
-    latencyMs: number;
-    status: FinalUsageStatus;
-    httpStatus: number | null;
-    inputTokens: number | null;
-    totalTokens: number | null;
-    outputTokens: number | null;
-    quotaReservationId: string | null;
-  }): Promise<UsageRecord | null> {
+  async finish(params: UsageFinalization): Promise<UsageRecord | null> {
     return this.usageRepository.finalize({ changes: params });
   }
 
